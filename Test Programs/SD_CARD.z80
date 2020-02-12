@@ -1,0 +1,765 @@
+	LD SP,$FFFF
+
+Start:
+
+ 	LD HL,INIT
+    CALL DisplayString
+MemoryCheck:;Escreve 00h em todos os endereços de memoria
+;	LD HL,ConfigByte;Verifica se é para apagar a memoria
+;    BIT 7,(HL)
+;    JP NZ,Program
+;    SET 7,(HL);Senao, escreve o bit
+    
+	LD HL,RAMCHK
+    CALL DisplayString
+	
+	LD A,$00
+	LD HL,$2000  ;Endereço para iniciar a checagem de memória
+    DI
+MemoryCheckLoop: ;Loop para escrever e incrementar o contador HL
+	LD  (HL),A
+	INC HL
+	CP  H
+	JP  NZ,MemoryCheckLoop 
+    
+    EI
+    
+ 	LD  HL,OK
+    CALL DisplayString 
+    
+
+;Inicializa o Cartão SD
+
+    LD HL,SDCINIT1;Envia mensagem de status
+    CALL DisplayString  
+    
+;Envia 100 Clocks para o cartão SD
+	CALL SDCInitClks    
+    
+    LD HL,OK;Envia mensagem de OK
+    CALL DisplayString
+    
+    LD C,$C0
+    LD A,$03
+	OUT (C),A;CS Low    
+    
+    LD HL,SDCINIT2;Envia mensagem de status
+    CALL DisplayString
+    
+    ;Envia CMD0
+    ;Primeiro byte($40)
+    LD A,$40    
+	CALL SPIOUT
+    ;Segundo byte($00)
+    LD A,$00
+    CALL SPIOUT    
+    ;Terceiro byte($00)
+    LD A,$00
+    CALL SPIOUT 
+    ;Quarto byte($00)
+    LD A,$00
+    CALL SPIOUT 
+    ;Quinto byte($00)
+    LD A,$00
+    CALL SPIOUT 
+    ;Sexto byte($95)
+    LD A,$95
+    CALL SPIOUT 
+    
+    CALL SPIIN
+    LD D,A
+    
+    CP $FF
+    JP Z,SDCNotFound
+    
+    BIT $00,A
+    CALL NZ,SDCInitIdle
+    
+    LD A,D
+    BIT $01,A
+    CALL NZ,SDCInitErase
+    
+    LD A,D
+    BIT $02,A
+    CALL NZ,SDCInitIlligal
+    
+    LD A,D
+    BIT $03,A
+    CALL NZ,SDCInitCRC
+    
+    LD A,D
+    BIT $04,A
+    CALL NZ,SDCInitEraseSeq
+    
+    LD A,D
+    BIT $05,A
+    CALL NZ,SDCInitAddress
+    
+    LD A,D
+    BIT $06,A
+    JP NZ,SDCInitParameter
+    
+    LD HL,OK;Envia mensagem de OK
+    CALL DisplayString
+    
+	RET
+    
+SDCInitIdle:
+    LD HL,SDCIdleMsg
+    CALL DisplayString
+	
+	RET
+    
+SDCInitErase:
+	LD HL,SDCEraseMsg
+    CALL DisplayString
+
+	RET
+    
+SDCInitIlligal:
+	LD HL,SDCIlligalMsg
+    CALL DisplayString
+    
+	RET
+    
+SDCInitCRC:
+	LD HL,SDCCRCMsg
+    CALL DisplayString
+    
+	RET
+    
+SDCInitEraseSeq:
+	LD HL,SDCEraseSeqMsg
+    CALL DisplayString
+    
+	RET
+    
+SDCInitAddress:
+	LD HL,SDCAddressMsg
+    CALL DisplayString
+    
+	RET
+    
+SDCInitParameter:
+	LD HL,SDCParameterMsg
+    CALL DisplayString
+    
+	RET
+    
+SDCNotFound:
+	LD HL,SDCNotFoundMsg
+    CALL DisplayString
+    
+	RET
+
+
+;Strings:
+
+SDCINIT0:
+    .DB "Inicializando Cartao SD",$0D,$FF
+SDCINIT1:
+    .DB "	CLKS...",$FF
+SDCINIT2:
+    .DB "	CMD0...",$FF
+SDCINIT3:
+    .DB "	CMD1...",$FF
+;SD Card Error Messages
+SDCIdleMsg:
+	.DB "	In Idle State",$0D,$FF
+SDCEraseMsg:
+	.DB "	Erase Reset",$0D,$FF
+SDCIlligalMsg:
+	.DB "	Illigal Command",$0D,$FF
+SDCCRCMsg:
+	.DB "	Command CRC Error",$0D,$FF
+SDCEraseSeqMsg:
+	.DB "	Erase Sequence Error",$0D,$FF
+SDCAddressMsg:
+	.DB "	Address Error",$0D,$FF
+SDCParameterMsg:
+	.DB "	Parameter Error",$0D,$FF
+SDCNotFoundMsg:
+	.DB "	SD Card Not Found",$0D,$FF
+
+;SDC Init 100 Clks
+SDCInitClks:
+	LD C,$C0 
+    LD A,$0B
+    LD B,$09
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+    OUT(C),A
+    OUT(C),B
+	RET
+    
+    
+
+
+;Converte caracteres ASCII em Binario
+;input: DE = ASCII a ser convertido
+;output: A = Numero binario
+ASCIIToBin: 
+	LD   a,d
+    CALL Hex1
+    ADD  a,a
+    ADD  a,a
+    ADD  a,a
+    ADD  a,a
+    LD   d,a
+    LD   a,e
+    CALL Hex1
+    OR   d
+    RET
+
+Hex1:
+	SUB  '0'
+	CP   10
+	RET  c
+	SUB  'A'-'0'-10
+	RET
+    
+;Converte numeros binarios para ASCII
+;input: A = Numero Binario
+;output: DE = Caracteres ASCII
+BinToASCII:   
+	ld c, a   ; a = number to convert
+    call BANum1
+    ld d, a
+    ld a, c
+    call BANum2
+    ld e, a
+    ret  ; return with hex number in de
+
+BANum1:   
+	rra
+    rra
+    rra
+    rra
+BANum2:  
+	or $F0
+    daa
+    add a, $A0
+    adc a, $40 ; Ascii hex at this point (0 to F)   
+    ret
+
+;///////////INPUT/OUTPUT/////////////
+
+;Mostra o caractere em A no display padrão
+DisplayChar:
+	PUSH BC
+	LD C,$40
+    LD B,A
+    CALL RS232OUT
+    POP BC
+	RET
+
+;Mostra uma string endereçada em HL no display padrão
+DisplayString:
+	LD C,$40
+	LD A,$FF
+	CP(HL)
+    RET Z
+    LD B,(HL)
+    CALL RS232OUT
+    INC HL
+	JP NZ,DisplayString
+	RET
+
+;Recebe uma tecla no dispositivo padrão
+GetKey:
+	PUSH BC
+    LD C,$40
+    CALL RS232IN
+    POP BC
+    RET
+    
+RS232OUT: ;RS232 Output | B->Output value C->I/O Address (62500Bps@2.5Mhz - 16uS)
+;	DI
+    LD A,$00
+	OUT(C),A ;4.8uS
+    LD A,B;1.6uS 
+    NOP;1.6uS
+    NOP
+    NOP
+    NOP
+    NOP
+	NOP;(TOTAL 16uS)
+     
+	OUT (C),A;BIT 1 4.8uS
+	RRA;1.6uS
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	OUT (C),A
+	RRA
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+	NOP
+	OUT (C),A
+	RRA
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+	NOP
+	OUT (C),A
+	RRA
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+	NOP
+	OUT (C),A
+	RRA
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+	NOP
+	OUT (C),A
+	RRA
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+	NOP
+	OUT (C),A
+	RRA
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+	NOP
+	OUT (C),A
+	RRA
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+	NOP
+	LD A,$ff
+	OUT (C),A
+    NOP
+    NOP
+	NOP
+  ;  EI
+	RET
+    
+RS232IN: ;RS232 Input | A-&gt;Return Value B-&gt;Routine Buffer C-&gt;I/O Address (62500Bps@2.5Mhz - 16uS)
+	DI
+	LD B,$00
+    LD A,$00
+    LD E,$02
+RS232INStart: ;Start Bit Loop
+    IN A,(C) ;4.8uS
+    CP $FD ;2.8uS
+    JP NZ,RS232INStart ;Loop end 4uS
+    NOP
+    NOP
+    NOP
+    NOP
+    ;18uS TOTAL
+    
+RS232ReceiveByteStart:
+    IN A,(C) ;BIT 0 4.8uS
+    AND E ;1.6uS
+    OR B ;1.6uS
+    RRCA ;1.6uS
+    LD B,A ;1.6uS
+    NOP
+    NOP
+	NOP
+    ;16uS TOTAL
+    
+    IN A,(C) ;BIT 1
+    AND E
+    OR B
+    RRCA
+    LD B,A
+    NOP
+    NOP
+	NOP
+    
+    IN A,(C) ;BIT 2
+    AND E
+    OR B
+    RRCA
+    LD B,A
+    NOP
+    NOP
+	NOP
+    
+    IN A,(C) ;BIT 3
+    AND E
+    OR B
+    RRCA
+    LD B,A
+    NOP
+    NOP
+	NOP
+    
+    IN A,(C) ;BIT 4
+    AND E
+    OR B
+    RRCA
+    LD B,A
+    NOP
+    NOP
+	NOP
+    
+    IN A,(C) ;BIT 5
+    AND E
+    OR B
+    RRCA
+    LD B,A
+    NOP
+    NOP
+	NOP
+    
+    IN A,(C) ;BIT 6
+    AND E
+    OR B
+    RRCA
+    LD B,A
+    NOP
+    NOP
+	NOP
+    
+    IN A,(C) ;BIT 7
+    AND E
+    OR B
+    RRCA
+    RRCA
+    
+    EI
+    RET
+    
+RS232InString: ;RS232 Input String | HL->String Position B->Routine Buffer C->I/O Address D->Numero bytes (38400Bps - 26,042uS)
+    
+    PUSH BC
+    PUSH AF
+    PUSH DE
+    
+    INC D
+    
+RS232StrStart: ;Start Bit Loop
+    CALL RS232IN;6.8uS    
+    LD (HL),A;4uS  
+    
+    DEC D;1.6uS
+    INC HL;2.4uS
+    
+    LD A,$00;1.6uS
+    CP D;1.6uS    
+    JP NZ,RS232StrStart;4uS(TOTAL 22uS)    
+    
+    JP RS232StrRet;4uS
+    
+RS232StrRet:
+	POP DE
+    POP AF
+    POP BC
+    RET
+    
+    
+    
+SPIOUT: ;SPI Output | A->;Output value C->I/O Address
+    LD B,A
+        
+	;MSB First
+    RLCA;Rotate Left
+    RES $02,A
+	OUT (C),A;BIT 7(CLK LOW)
+    SET $02,A
+	OUT (C),A;BIT 7(CLK HIGH)
+    
+    LD A,B
+    RLCA
+	RLCA    
+	RES $02,A
+	OUT (C),A
+    SET $02,A
+	OUT (C),A
+    
+    LD A,B
+    RLCA
+    RLCA
+	RLCA    
+	RES $02,A
+	OUT (C),A
+    SET $02,A
+	OUT (C),A
+    
+    LD A,B
+    RLCA
+    RLCA
+    RLCA
+	RLCA    
+	RES $02,A
+	OUT (C),A
+    SET $02,A
+	OUT (C),A
+    
+    LD A,B
+    RRCA
+    RRCA
+    RRCA    
+	RES $02,A
+	OUT (C),A
+    SET $02,A
+	OUT (C),A
+    
+    LD A,B
+    RRCA
+    RRCA   
+	RES $02,A
+	OUT (C),A
+    SET $02,A
+	OUT (C),A
+    
+    LD A,B
+    RRCA
+	RES $02,A
+	OUT (C),A
+    SET $02,A
+	OUT (C),A
+    
+	LD A,B    
+	RES $02,A
+	OUT (C),A;BIT 0(CLK LOW)
+    SET $02,A
+	OUT (C),A;BIT 0(CLK HIGH)    
+	RET
+    
+SPIIN: ;SPI Input | A->Return value C->I/O Address (MISO->D2;MOSI->D0;CLK->D1;CS->D3) ***
+        
+    LD A,$00;Reset A
+	LD B,$00;MSB First
+    
+    ;BIT 0
+	OUT (C),A;CLK LOW
+    IN A,(C)
+    AND $04
+    RLCA
+    LD B,A
+    LD A,$02
+	OUT (C),A;CLK HIGH
+    
+    ;BIT 1
+    LD A,$00
+	OUT (C),A;CLK LOW
+    IN A,(C)
+    AND $02   
+    OR B   
+    RLCA
+    LD B,A
+    LD A,$04
+	OUT (C),A;CLK HIGH
+    
+    ;BIT 2
+    LD A,$00
+	OUT (C),A;CLK LOW
+    IN A,(C)
+    AND $02
+    OR B
+    RLCA
+    LD B,A
+    LD A,$04
+	OUT (C),A;CLK HIGH
+    
+    ;BIT 3
+    LD A,$00
+	OUT (C),A;CLK LOW
+    IN A,(C)
+    AND $02
+    OR B
+    RLCA
+    LD B,A
+    LD A,$04
+	OUT (C),A;CLK HIGH
+    
+    ;BIT 4
+    LD A,$00
+	OUT (C),A;CLK LOW
+    IN A,(C)
+    AND $02
+    OR B
+    RLCA
+    LD B,A
+    LD A,$04
+	OUT (C),A;CLK HIGH
+    
+    ;BIT 5
+    LD A,$00
+	OUT (C),A;CLK LOW
+    IN A,(C)
+    AND $02
+    OR B
+    RLCA
+    LD B,A
+    LD A,$04
+	OUT (C),A;CLK HIGH
+    
+    ;BIT 6
+    LD A,$00
+	OUT (C),A;CLK LOW
+    IN A,(C)
+    AND $02
+    OR B
+    RLCA
+    LD B,A
+    LD A,$04
+	OUT (C),A;CLK HIGH
+    
+    ;BIT 7
+    LD A,$00
+	OUT (C),A;CLK LOW
+    IN A,(C)
+    AND $02
+    OR B  
+    RRCA
+    RRCA
+    LD B,A
+    LD A,$04
+	OUT (C),A;CLK HIGH
+    LD A,B
+    
+	RET
+    
+
+ ;////////STRINGS/////////
+INIT:
+	.DB "Inicializando Sistema...",$0D,"Joao Pito, 2017.",$0D,$FF
+RAMCHK:
+	.DB "32767B RAM ",$FF
+OK:
+	.DB "OK",$0D,$FF
+READY:
+	.DB "READY",$0D,$FF
+FAILED:
+	.DB "FAILED",$0D,$FF
+
+
+
+
+
+
+
+
+
+
+
+
+
+

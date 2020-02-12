@@ -1,0 +1,11 @@
+LD A,00h
+OUT (00H),A
+OUT (40h),A
+OUT (80h),A
+OUT (C0h),A
+
+OUT (3Fh),A
+OUT (7Fh),A
+OUT (BFh),A
+OUT (FFh),A
+JP 0000h

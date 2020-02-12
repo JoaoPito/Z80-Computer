@@ -1,0 +1,507 @@
+	LD A,$00
+	LD SP,$8050
+	LD ($8002),A
+    LD C,$C0
+    
+	LD B,'R'
+    CALL RS232OUT
+    LD B,'E'
+    CALL RS232OUT
+    LD B,'A'
+    CALL RS232OUT
+    LD B,'D'
+    CALL RS232OUT
+    LD B,'Y'
+    CALL RS232OUT
+    LD B,'.'
+    CALL RS232OUT
+    LD B,$20
+    CALL RS232OUT
+    
+Program:
+    CALL GetKey
+    CP $00
+    LD B,A
+    CALL NZ,RS232OUT    
+	JP Program
+
+GetKey:
+GetKeyCol01:
+	IN A,($01)
+	CP $00
+	JP Z,GetKeyCol02
+	CP $01
+	JP Z,Key1
+	CP $02
+	JP Z,Key2
+	CP $04
+	JP Z,Key3
+	CP $08
+	JP Z,Key4
+	CP $10
+	JP Z,Key5
+	CP $20
+	JP Z,Key6
+	CP $40
+	JP Z,Key7
+	CP $80
+	JP Z,Key8
+GetKeyCol02:
+	IN A,($02)
+	CP $00
+	JP Z,GetKeyCol03
+	;CP $01
+	;JP Z,KeySettings
+	CP $02
+	JP Z,Keyq
+	CP $04
+	JP Z,Keyw
+	CP $08
+	JP Z,Keye
+	CP $10
+	JP Z,Keyr
+	CP $20
+	JP Z,Keyt
+	CP $40
+	JP Z,Key0
+	CP $80
+	JP Z,Key9
+GetKeyCol03:
+	IN A,($03)
+	CP $00
+	JP Z,GetKeyCol04
+	;CP $01
+	;JP Z,KeyLogo
+	CP $02
+	JP Z,Keyk
+	CP $04
+	JP Z,Keyl
+	CP $08
+	JP Z,Keyp
+	CP $10
+	JP Z,Keyo
+	CP $20
+	JP Z,Keyi
+	CP $40
+	JP Z,Keyu
+	CP $80
+	JP Z,Keyy
+GetKeyCol04:
+	IN A,($04)
+	CP $00
+	JP Z,GetKeyCol05
+	;CP 01h
+	;JP Z,KeyDemo
+	CP $02
+	JP Z,Keya
+	CP $04
+	JP Z,Keys
+	CP $08
+	JP Z,Keyd
+	CP $10
+	JP Z,Keyf
+	CP $20
+	JP Z,Keyg
+	CP $40
+	JP Z,Keyh
+	CP $80
+	JP Z,Keyj
+GetKeyCol05:
+	IN A,($05)
+	CP $00
+	;JP Z,GetKeyCol06
+	;CP 01h
+	;JP Z,KeyHelp
+	CP $02
+	JP Z,Keyz
+	CP $04
+	JP Z,Keyx
+	CP $08
+	JP Z,Keyc
+	CP $10
+	JP Z,Keyv
+	CP $20
+	JP Z,Keyb
+	CP $40
+	JP Z,Keyn
+	CP $80
+	JP Z,Keym
+GetKeyCol06:
+	IN A,($06)
+	CP $00
+	;JP Z,GetKeyCol07
+	;CP 01h
+	;JP Z,KeyMainMenu
+	CP $02
+	JP Z,KeySpace
+	;CP 04h
+	;JP Z,KeyTriangle
+	;CP 08h
+	;JP Z,KeyRBatman
+	;CP 10h
+	;JP Z,KeySquare
+	;CP 20h
+	;JP Z,KeyCircle
+	;CP 40h
+	;JP Z,KeyAnswer
+	;CP 80h
+	;JP Z,KeyBackspace
+;GetKeyCol07:
+	;IN A,(07h)
+	;CP 01h
+	;JP Z,KeyRepeat
+	;CP 02h
+	;JP Z,KeyPBracketsOp
+	;CP 04h
+	;JP Z,KeyPBracketsClo
+	;CP 08h
+	;JP Z,KeyDown
+	;CP 10h
+	;JP Z,KeyRight
+	;CP 20h
+	;JP Z,KeyLeft
+	;CP 40h
+	;JP Z,KeyUp
+	;CP 80h
+	;JP Z,KeyEnter
+	LD A,$00;Null
+	JP DebounceCheck
+
+;Traducao do Key Code para ASCII
+
+	;Especiais
+KeyDemo:;Demo=NO KEY
+	;LD A,09h
+	JP DebounceCheck
+KeyHelp:;Help=NO KEY
+	;LD A,09h
+	JP DebounceCheck
+KeyRepeat:;Repeat=NO KEY
+	;LD A,09h
+	JP DebounceCheck
+KeyAnswer:;Answer=NO KEY
+	;LD A,0Fh
+	JP DebounceCheck
+KeyTriangle:;Triangle=NO KEY
+	;LD A,0Fh
+	JP DebounceCheck
+KeyRBatman:;R_Batman=NO KEY
+	;LD A,0Fh
+	JP DebounceCheck
+KeySquare:;Square=NO KEY
+	;LD A,0Fh
+	JP DebounceCheck
+KeyCircle:;Circle=NO KEY
+	;LD A,0Fh
+	JP DebounceCheck
+KeyDown:;Down=NO KEY
+	;LD A,0Fh
+	JP DebounceCheck
+KeyRight:;Right=NO KEY
+	;LD A,0Fh
+	JP DebounceCheck
+KeyLeft:;Left=NO KEY
+	;LD A,0Fh
+	JP DebounceCheck
+KeyUp:;Up=NO KEY
+	;LD A,0Fh
+	JP DebounceCheck
+
+KeySettings:;Settings=TAB
+	LD A,$09
+	JP DebounceCheck
+KeyLogo:;Logo=CAPS LOCK
+	LD A,$0F;Shift In Code
+	JP DebounceCheck
+KeyBackspace:;Logo=CAPS LOCK
+	LD A,$08
+	JP DebounceCheck
+KeyEnter:;Logo=CAPS LOCK
+	LD A,$0D;Carriage Return
+	JP DebounceCheck
+KeyMainMenu:;Main Menu=CTRL
+	LD A,$11;Device Control 1
+	JP DebounceCheck
+KeySpace:
+	LD A,$20
+	JP DebounceCheck
+
+;Numeros
+Key1:
+	LD A,$31
+	JP DebounceCheck
+Key2:
+	LD A,$32
+	JP DebounceCheck
+Key3:
+	LD A,$33
+	JP DebounceCheck
+Key4:
+	LD A,$34
+	JP DebounceCheck
+Key5:
+	LD A,$35
+	JP DebounceCheck
+Key6:
+	LD A,$36
+	JP DebounceCheck
+Key7:
+	LD A,$37
+	JP DebounceCheck
+Key8:
+	LD A,$38
+	JP DebounceCheck
+Key9:
+	LD A,$39
+	JP DebounceCheck
+Key0:
+	LD A,$30
+	JP DebounceCheck
+
+;Letras
+Keya:
+	LD A,$61
+	JP DebounceCheck
+Keyb:
+	LD A,$62
+	JP DebounceCheck
+Keyc:
+	LD A,$63
+	JP DebounceCheck
+Keyd:
+	LD A,$64
+	JP DebounceCheck
+Keye:
+	LD A,$65
+	JP DebounceCheck
+Keyf:
+	LD A,$66
+	JP DebounceCheck
+Keyg:
+	LD A,$67
+	JP DebounceCheck
+Keyh:
+	LD A,$68
+	JP DebounceCheck
+Keyi:
+	LD A,$69
+	JP DebounceCheck
+Keyj:
+	LD A,$6A
+	JP DebounceCheck
+Keyk:
+	LD A,$6B
+	JP DebounceCheck
+Keyl:
+	LD A,$6C
+	JP DebounceCheck
+Keym:
+	LD A,$6D
+	JP DebounceCheck
+Keyn:
+	LD A,$6E
+	JP DebounceCheck
+Keyo:
+	LD A,$6F
+	JP DebounceCheck
+Keyp:
+	LD A,$70
+	JP DebounceCheck
+Keyq:
+	LD A,$71
+	JP DebounceCheck
+Keyr:
+	LD A,$72
+	JP DebounceCheck
+Keys:
+	LD A,$73
+	JP DebounceCheck
+Keyt:
+	LD A,$74
+	JP DebounceCheck
+Keyu:
+	LD A,$75
+	JP DebounceCheck
+Keyv:
+	LD A,$76
+	JP DebounceCheck
+Keyw:
+	LD A,$77
+	JP DebounceCheck
+Keyx:
+	LD A,$78
+	JP DebounceCheck
+Keyy:
+	LD A,$79
+	JP DebounceCheck
+Keyz:
+	LD A,$7A
+	JP DebounceCheck
+
+;Outros
+KeyExcl:;!
+	LD A,$21
+	JP DebounceCheck
+KeyAtSign:;@
+	LD A,$40
+	JP DebounceCheck
+KeyNumbSign:;#
+	LD A,$23
+	JP DebounceCheck
+KeyDollar:;$
+	LD A,$24
+	JP DebounceCheck
+KeyPercent:;%
+	LD A,$25
+	JP DebounceCheck
+KeyQuot:;"
+	LD A,$22
+	JP DebounceCheck
+KeyAmp:;&
+	LD A,$26
+	JP DebounceCheck
+KeyAst:;*
+	LD A,$2A
+	JP DebounceCheck
+KeyParentOp:;(
+	LD A,$28
+	JP DebounceCheck
+KeyParentClo:;)
+	LD A,$29
+	JP DebounceCheck
+KeyPBracketsOp:;<
+	LD A,$3C
+	JP DebounceCheck
+KeyPBracketsClo:;>
+	LD A,$3E
+	JP DebounceCheck
+KeyBracesOp:;{
+	LD A,$7B
+	JP DebounceCheck
+KeyVBar:;|
+	LD A,$7C
+	JP DebounceCheck
+KeyBraceClo:;}
+	LD A,$7D
+	JP DebounceCheck
+
+DebounceCheck:
+	LD HL,$8002
+	CP (HL)
+	JP z,ResetRegA
+	LD (HL),A
+	RET
+ResetRegA:
+	LD A,$00
+	RET
+
+RS232OUT: ;B->Output value C->I/O Address (38400Bps - 26,042uS)
+    LD A,$00 
+	OUT(C),A ;6uS
+	NOP;2uS
+	NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	LD A,B;2uS (TOTAL 26uS)
+	OUT (C),A;BIT 1 6uS
+	RRA;2uS
+	NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	OUT (C),A
+	RRA
+	NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	OUT (C),A
+	RRA
+	NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	OUT (C),A
+	RRA
+	NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	OUT (C),A
+	RRA
+	NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	OUT (C),A
+	RRA
+	NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	OUT (C),A
+	RRA
+	NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	OUT (C),A
+	RRA
+	NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	LD A,$ff
+	OUT (C),A
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	RET

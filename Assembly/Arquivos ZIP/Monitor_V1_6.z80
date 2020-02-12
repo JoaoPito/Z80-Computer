@@ -1,0 +1,1115 @@
+;Versao 1.6 06/07/2017
+;Display e teclado por conexão serial rs232
+
+;$8000 - $8012 -&gt; Buffer Caracteres
+;$8013 - $8014 -&gt; Posicao Buffer
+;$C0 -&gt; Porta RS232
+;FFFF -&gt; Começo do Stack
+
+;Variaveis
+#define charBuffer $7F ;Tamanho do buffer de comandos(128 caracteres)
+#define buffer $8080 ;Cursor
+#define comBuffer1 $8082 ;Buffer para comandos 1
+#define comBuffer2 $8084 ;Buffer para comandos 2
+
+;Rotinas de Boot
+Boot:
+	LD SP,$FFFF    
+    LD HL,INIT1
+    CALL DisplayString
+    LD HL,INIT2
+    CALL DisplayString
+    ;Escreve 00h em todos os endereços de memoria
+ClearMem:
+	LD A,$00
+	LD HL,$2000    
+ClearMemLoop: ;Loop para escrever e incrementar o contador HL
+	LD  (HL),A
+	INC HL
+	CP  H    
+	JP  NZ,ClearMemLoop
+ 	LD HL,RAMOK
+    CALL DisplayString
+    
+    LD HL,SDCINIT0
+    CALL DisplayString
+ 	CALL SDCardInit
+    
+    LD HL,MONITORINIT
+    CALL DisplayString
+    
+InitMonitor:
+    LD HL,$8000 ;Inicializa o cursor(19 caracteres)
+    LD A,$00
+    LD (buffer),HL
+ClearBufLoop:;Limpa o buffer de comando
+    LD (HL),$30
+    INC A
+    INC HL
+    CP charBuffer+$01
+    JP NZ,ClearBufLoop
+;Coloca o marcador de linha no display(>)
+    LD A,'>'
+    CALL DisplayChar
+ 
+;Monitor loop
+Monitor:
+	CALL GetKey;Verifica se alguma tecla foi pressionada
+	CP $00
+	JP Z,Monitor;Senao, volta para o loop
+	;Verifica se o ENTER foi pressionado
+	CP $0D ;Compara o reg A com 0Dh(Carriage Return)
+	JP Z,MonExecCom ;Se for igual, executa o comando
+	;Verifica se o BACKSPACE foi pressionado
+	CP $7F ;Compara o reg A com 7Fh(Backspace)
+	JP Z,MonBckspcCom ;Se for igual, executa o comando para apagar
+	
+	;Se nenhuma condicao acima for aceita, coloca o caractere no buffer
+MonBufferChar:
+	LD HL,(buffer);Carrega o cursor do buffer em HL
+	LD (HL),A;Carrega o caractere no buffer
+	INC HL
+	LD (buffer),HL;Carrega HL no cursor
+	CALL DisplayChar;Coloca o caractere no display
+	LD DE,buffer
+	SBC HL,DE;Verifica se o limite de caracteres foi ultrapassado
+	JP Z,MonExecCom;Se sim, executa o comando
+	;Senao, volta a procurar caracteres
+	JP Monitor;Fecha o loop
+ 
+MonExecCom:
+    LD HL,$8000 ;Carrega HL com o end. do comeco do buffer
+    LD B,charBuffer ;Carrega B com o numero de caracteres do buffer(19)
+    
+MonExecComLoop:
+    ;Verifica se o comando DUMP foi executado(tecla D ou d)
+	LD A,'D' ;Carrega A com 'D' ASCII	
+    CP (HL)
+    JP Z,MonDump
+    
+    ;Verifica se o comando WRITE foi executado(tecla D ou d)
+	LD A,'W' ;Carrega A com 'W' ASCII
+    CP (HL)
+    JP Z,MonWrite
+    
+    ;Verifica se o comando RUN foi executado(tecla D ou d)
+	LD A,'R' ;Carrega A com 'R' ASCII
+    CP (HL)
+    JP Z,MonRun
+    
+    ;Verifica se o comando OUT foi executado(tecla D ou d)
+	LD A,'O' ;Carrega A com 'O' ASCII
+    CP (HL)
+    JP Z,MonOut
+    
+    ;Verifica se o comando BOOT foi executado(tecla D ou d)
+	LD A,'B' ;Carrega A com 'B' ASCII
+    CP (HL)
+    JP Z,MonBoot
+    
+    INC HL;Incrementa HL
+    DEC B;Decrementa B 
+    LD A,$00
+    CP B;Verifica se HL nao passou do buffer
+    JP NZ,MonExecComLoop;Senao, repete o loop
+    
+    JP Z,MonNotFound
+ 
+;DUMP COMMAND
+MonDump:
+	INC HL
+    LD A,$20 ;Verifica se existe um espaço($20) depois da letra d
+    CP (HL)
+    JP nz,MonNotFound;Senão, limpa o buffer e volta para o monitor
+    
+    INC HL;Pega o primeiro endereço escrito no buffer e converte em binario(Primeiro byte)
+    LD D,(HL)
+    INC HL
+    LD E,(HL)
+    CALL ASCIIToBin
+    LD B,A    
+    INC HL;Segundo byte
+    LD D,(HL)
+    INC HL
+    LD E,(HL)
+    LD (buffer),HL
+    CALL ASCIIToBin
+    LD H,B
+    LD L,A
+    LD (comBuffer1),HL
+    
+    LD HL,(buffer)
+    INC HL
+    LD A,$20 ;Verifica se existe um espaço($20) depois do primeiro endereço
+    CP (HL)
+    JP nz,MonDump1Add;Senão, exibe o primeiro endereço
+    
+    INC HL;Pega o segundo numero escrito no buffer e converte em binario(Primeiro byte)
+    LD D,(HL)
+    INC HL
+    LD E,(HL)
+    CALL ASCIIToBin
+    LD (comBuffer2),A;Armazena o numero de bytes no buffer 2
+    
+    LD HL,(comBuffer1);Carrega o endereço inicial em HL    
+    
+MonDumpAdd:	
+    ;Mostra o endereço no display
+    
+    LD A,$00;Zera o contador de colunas
+    LD ($8086),A
+    
+    LD A,$0D;Pula uma linha
+    CALL DisplayChar
+    
+    LD A,'$'
+    CALL DisplayChar
+    
+    LD A,H;Primeiro byte
+    CALL BinToASCII
+    LD A,D
+    CALL DisplayChar
+    LD A,E
+    CALL DisplayChar
+    
+    LD A,L;Segundo byte
+    CALL BinToASCII
+    LD A,D
+    CALL DisplayChar
+    LD A,E
+    CALL DisplayChar
+    
+    LD A,':'
+    CALL DisplayChar    
+    
+MonDumpData:
+    ;Mostra os dados do endereço no display
+    LD A,' '
+    CALL DisplayChar
+    
+    LD A,(HL)
+    CALL BinToASCII
+    LD A,D
+    CALL DisplayChar
+    LD A,E
+    CALL DisplayChar
+    LD A,(comBuffer2);Verifica quantos bytes foram exibidos
+    CP $00
+    JP z,MonDumpDataFinish;Se for igual a 0, termina o loop
+    INC HL
+    DEC A
+    LD (comBuffer2),A
+    
+    LD DE,$8086;Verifica o contador de colunas
+    EX DE,HL
+    LD B,(HL)
+    LD A,$0F
+    INC (HL)
+    EX DE,HL     
+    CP B
+    JP Z,MonDumpAdd;Se =8 salta para a função para exibir o endereço    
+    
+    JP MonDumpData
+    
+MonDumpDataFinish:
+    LD A,$0D
+    CALL DisplayChar    
+	JP InitMonitor
+    
+MonDump1Add:;Funcao para exibir somente 1 endereço
+    LD HL,(comBuffer1);Carrega o endereço inicial em HL
+    LD A,$00
+    LD (comBuffer2),A
+    JP MonDumpAdd
+    
+    
+;WRITE COMMAND
+MonWrite:
+	INC HL
+	LD A,$20 ;Verifica se existe um espaço($20) depois da letra d
+    CP (HL)
+    JP nz,MonNotFound;Senão, limpa o buffer e volta para o monitor    
+    
+    INC HL;Pega o endereço escrito no buffer e converte em binario(Primeiro byte)
+    LD D,(HL)
+    INC HL
+    LD E,(HL)
+    CALL ASCIIToBin
+    LD B,A    
+    INC HL;Segundo byte
+    LD D,(HL)
+    INC HL
+    LD (buffer),HL
+    LD E,(HL)
+    CALL ASCIIToBin    
+    LD H,B
+    LD L,A
+    LD (comBuffer1),HL
+    
+    LD HL,(buffer) 
+    INC HL
+    LD A,$20 ;Verifica se existe um espaço($20) depois do endereço
+    CP (HL)
+    JP nz,MonNotFound;Senão, limpa o buffer e volta para o monitor
+    
+MonWriteData:
+
+    INC HL
+    LD D,(HL)
+    INC HL
+    LD E,(HL)
+    CALL ASCIIToBin
+    
+    LD DE,(comBuffer1)
+    LD (DE),A;Escreve o valor no endereço    
+    INC DE;Incrementa o endereço
+    LD (comBuffer1),DE
+    
+    INC HL
+    LD A,$20 ;Verifica se existe um espaço($20) depois do endereço
+    CP (HL)
+    JP z,MonWriteData
+    JP MonWriteFinish;Senão, termina o comando
+    
+MonWriteFinish:    
+    LD A,$0D
+    CALL DisplayChar
+    LD A,'O'
+    CALL DisplayChar
+    LD A,'K'
+    CALL DisplayChar
+    LD A,$0D
+    CALL DisplayChar
+    
+	JP InitMonitor
+    
+;RUN COMMAND
+MonRun:
+	INC HL
+ 	LD A,$20 ;Verifica se existe um espaço($20) depois da letra R
+    CP (HL)
+    JP nz,MonNotFound;Senão, limpa o buffer e volta para o monitor
+    
+    INC HL;Pega o endereço escrito no buffer e converte em binario(Primeiro byte)
+    LD D,(HL)
+    INC HL
+    LD E,(HL)
+    CALL ASCIIToBin
+    LD B,A    
+    INC HL;Segundo byte
+    LD D,(HL)
+    INC HL
+    LD E,(HL)
+    CALL ASCIIToBin
+    LD H,B
+    LD L,A
+    
+    JP (HL)
+    
+    ;OUTPUT COMMAND
+MonOut:
+	INC HL
+	LD A,$20 ;Verifica se existe um espaço($20) depois da letra o
+    CP (HL)
+    JP nz,MonNotFound;Senão, limpa o buffer e volta para o monitor    
+    
+    INC HL;Pega o endereço escrito no buffer e converte em binario(Primeiro byte)
+    LD D,(HL)
+    INC HL
+    LD E,(HL)
+    CALL ASCIIToBin
+    LD (comBuffer1),A
+    
+    INC HL
+    LD A,$20 ;Verifica se existe um espaço($20) depois do endereço
+    CP (HL)
+    JP nz,MonNotFound;Senão, limpa o buffer e volta para o monitor
+    
+MonOutData:
+    INC HL
+    LD D,(HL)
+    INC HL
+    LD E,(HL)
+    CALL ASCIIToBin
+    LD (buffer),HL
+    
+    LD HL,comBuffer1
+    LD C,(HL)
+    OUT (C),A;Escreve o valor na porta I/O    
+    INC C;Incrementa o endereço
+    LD (HL),C
+    
+    LD HL,(buffer)
+    INC HL
+    LD A,$20 ;Verifica se existe um espaço($20) depois do endereço
+    CP (HL)
+    JP z,MonWriteData
+    JP MonWriteFinish;Senão, termina o comando
+    
+MonOutFinish:    
+    LD A,$0D
+    CALL DisplayChar
+    LD A,'O'
+    CALL DisplayChar
+    LD A,'K'
+    CALL DisplayChar
+    LD A,$0D
+    CALL DisplayChar
+    
+	JP InitMonitor
+    
+;LOAD COMMAND
+MonLoad:
+ 	INC HL;Verifica se existe um espaço($20) depois da letra d
+    LD A,$20
+    CP (HL)
+    JP nz,MonNotFound;Senão, limpa o buffer e volta para o monitor
+    
+	JP InitMonitor
+    
+;BOOT COMMAND
+MonBoot:
+    ;Verifica se esta escrito (B)OOT
+	LD A,$4F ;Carrega A com 'O' ASCII
+	INC HL
+    CP (HL)
+	JP NZ,MonNotFound;Senao, salta para MonNotFound
+    
+    ;Verifica se esta escrito (B)OOT
+	LD A,$4F ;Carrega A com 'O' ASCII
+	INC HL
+    CP (HL)
+	JP NZ,MonNotFound;Senao, salta para MonNotFound
+    
+    ;Verifica se esta escrito (B)OOT
+	LD A,$54 ;Carrega A com 'T' ASCII
+	INC HL
+    CP (HL)
+	JP NZ,MonNotFound;Senao, salta para MonNotFound
+    
+    LD A,$0D
+    CALL DisplayChar
+    
+	JP $0000;Reinicia a maquina
+    
+;CLEAR COMMAND
+MonClear:
+    
+	JP InitMonitor
+    ;Backspace
+MonBckspcCom:
+	LD HL,($8013)
+    LD (HL),$00
+    DEC HL
+    LD ($8013),HL
+	JP InitMonitor
+    
+;Mensagem comando nao encontrado
+MonNotFound:
+	LD A,' '
+    CALL DisplayChar
+	LD A,'?'
+    CALL DisplayChar
+    LD A,$0D
+    CALL DisplayChar
+	JP InitMonitor    
+    
+    
+;CONVERSAO NUMERICA:
+
+; Converte um inteiro para BCD de 6 digitos(1181 Tcycles)
+; input: HL = inteiro a converter
+; output: C:HL = numero BCD de 6 digitos
+; destroi: A,F,B,C,D,E,H,L
+BinToBcd:
+	LD   BC, 16*256+0 ; handle 16 bits, one bit per iteration
+	LD   DE, 0
+cvtLoop:
+	ADD  HL, HL
+	LD   A, E
+	ADC  A, A
+	DAA
+	LD   E, A
+	LD   A, D
+	ADC  A, A
+	DAA
+	LD   D, A
+	LD   A, C
+	ADC  A, A
+	DAA
+	LD   C, A
+	DJNZ cvtLoop
+	EX   DE,HL
+	RET
+    
+;Converte um numero BCD para string ASCII
+;input: DE = Aponta para o end. de memoria da string
+;C:HL = numero a ser convertido
+;output: DE = apontador depois da string ASCII
+;destroi: A,F,D,E
+BcdToASCII: 
+	LD   A,C
+	CALL cvtUpperNibble
+	LD   A,C
+	CALL cvtLowerNibble
+	LD   A,H
+	CALL cvtUpperNibble
+	LD   A,H
+	CALL cvtLowerNibble
+	LD   A,L
+	CALL cvtUpperNibble
+	LD   A,L
+	CALL cvtLowerNibble
+
+cvtUpperNibble: ;Move o nibble acima para o nibble abaixo
+	RRA
+	RRA
+	RRA
+	RRA
+
+cvtLowerNibble: ;Converte o nibble abaixo para ASCII e copia para a memoria
+	AND $0F
+	ADD A,$90
+	DAA
+	ADC A,$40
+	DAA
+	LD (DE),A
+	INC DE
+	RET
+
+;Converte caracteres ASCII em Binario
+;input: DE = ASCII a ser convertido
+;output: A = Numero binario
+ASCIIToBin: 
+	LD   a,d
+    CALL Hex1
+    ADD  a,a
+    ADD  a,a
+    ADD  a,a
+    ADD  a,a
+    LD   d,a
+    LD   a,e
+    CALL Hex1
+    OR   d
+    RET
+
+Hex1:
+	SUB  '0'
+	CP   10
+	RET  c
+	SUB  'A'-'0'-10
+	RET
+    
+;Converte numeros binarios para ASCII
+;input: A = Numero Binario
+;output: DE = Caracteres ASCII
+BinToASCII:   
+	ld c, a   ; a = number to convert
+    call BANum1
+    ld d, a
+    ld a, c
+    call BANum2
+    ld e, a
+    ret  ; return with hex number in de
+
+BANum1:   
+	rra
+    rra
+    rra
+    rra
+BANum2:  
+	or $F0
+    daa
+    add a, $A0
+    adc a, $40 ; Ascii hex at this point (0 to F)   
+    ret
+
+;INPUT/OUTPUT
+
+;Mostra o caractere em A no display padrão
+DisplayChar:
+	LD C,$40
+    LD B,A
+    CALL RS232OUT
+	RET
+
+;Mostra uma string endereçada em HL no display padrão
+DisplayString:
+	LD C,$40
+	LD A,$FF
+	CP(HL)
+    RET Z
+    LD B,(HL)
+    CALL RS232OUT
+    INC HL
+	JP NZ,DisplayString
+	RET
+    
+GetKey:
+    LD C,$40
+    CALL RS232IN
+    RET
+    
+RS232OUT: ;RS232 Output | B-&gt;Output value C-&gt;I/O Address (38400Bps - 26,042uS)
+    LD A,$00 
+	OUT(C),A ;6uS
+	NOP;2uS
+	NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	LD A,B;2uS (TOTAL 26uS)
+	OUT (C),A;BIT 1 6uS
+	RRA;2uS
+	NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	OUT (C),A
+	RRA
+	NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	OUT (C),A
+	RRA
+	NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	OUT (C),A
+	RRA
+	NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	OUT (C),A
+	RRA
+	NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	OUT (C),A
+	RRA
+	NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	OUT (C),A
+	RRA
+	NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	OUT (C),A
+	RRA
+	NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	LD A,$ff
+	OUT (C),A
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	RET
+    
+RS232IN: ;RS232 Input | A-&gt;Return Value B-&gt;Routine Buffer C-&gt;I/O Address (38400Bps - 26,042uS)
+	LD B,$00
+    LD A,$00
+RS232INStart: ;Start Bit Loop
+    IN A,(C) ;6uS
+    CP $FD ;3,5uS
+    JP NZ,RS232INStart ;Loop end 5uS
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    
+RS232ReceiveByteStart:
+    IN A,(C) ;BIT 0 6uS
+    AND $02 ;3,5uS
+    OR B ;2uS
+    RRCA ;2uS
+    LD B,A ;2uS
+    NOP ;2 uS
+    NOP
+    NOP
+    NOP
+    NOP ;25.5uS TOTAL
+    
+    IN A,(C) ;BIT 1
+    AND $02
+    OR B
+    RRCA
+    LD B,A
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    
+    IN A,(C) ;BIT 2
+    AND $02
+    OR B
+    RRCA
+    LD B,A
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    
+    IN A,(C) ;BIT 3
+    AND $02
+    OR B
+    RRCA
+    LD B,A
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    
+    IN A,(C) ;BIT 4
+    AND $02
+    OR B
+    RRCA
+    LD B,A
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    
+    IN A,(C) ;BIT 5
+    AND $02
+    OR B
+    RRCA
+    LD B,A
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    
+    IN A,(C) ;BIT 6
+    AND $02
+    OR B
+    RRCA
+    LD B,A
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    
+    IN A,(C) ;BIT 7
+    AND $02
+    OR B
+    RRCA
+    RRCA
+    NOP
+    NOP
+    
+    RET
+    
+SPIOUT: ;SPI Output | A->;Output value C->I/O Address
+    LD B,A
+        
+	;MSB First
+    RLCA;Rotate Left
+    RES $01,A
+	OUT (C),A;BIT 7(CLK LOW)
+    SET $01,A
+	OUT (C),A;BIT 7(CLK HIGH)
+    
+    LD A,B
+    RLCA
+	RLCA    
+	RES $01,A
+	OUT (C),A
+    SET $01,A
+	OUT (C),A
+    
+    LD A,B
+    RLCA
+    RLCA
+	RLCA    
+	RES $01,A
+	OUT (C),A
+    SET $01,A
+	OUT (C),A
+    
+    LD A,B
+    RLCA
+    RLCA
+    RLCA
+	RLCA    
+	RES $01,A
+	OUT (C),A
+    SET $01,A
+	OUT (C),A
+    
+    LD A,B
+    RRCA
+    RRCA
+    RRCA    
+	RES $01,A
+	OUT (C),A
+    SET $01,A
+	OUT (C),A
+    
+    LD A,B
+    RRCA
+    RRCA   
+	RES $02,A
+	OUT (C),A
+    SET $02,A
+	OUT (C),A
+    
+    LD A,B
+    RRCA
+	RES $02,A
+	OUT (C),A
+    SET $02,A
+	OUT (C),A
+    
+	LD A,B    
+	RES $02,A
+	OUT (C),A;BIT 0(CLK LOW)
+    SET $02,A
+	OUT (C),A;BIT 0(CLK HIGH)    
+	RET
+    
+SPIIN: ;SPI Input | A->Return value C->I/O Address
+        
+    LD A,$00;Reset A
+	LD B,$00;MSB First
+    
+    ;BIT 0
+	OUT (C),A;CLK LOW
+    IN A,(C)
+    AND $04
+    RLCA
+    LD B,A
+    LD A,$02
+	OUT (C),A;CLK HIGH
+    
+    ;BIT 1
+    LD A,$00
+	OUT (C),A;CLK LOW
+    IN A,(C)
+    AND $04    
+    OR B   
+    RLCA
+    LD B,A
+    LD A,$02
+	OUT (C),A;CLK HIGH
+    
+    ;BIT 2
+    LD A,$00
+	OUT (C),A;CLK LOW
+    IN A,(C)
+    AND $04
+    OR B
+    RLCA
+    LD B,A
+    LD A,$02
+	OUT (C),A;CLK HIGH
+    
+    ;BIT 3
+    LD A,$00
+	OUT (C),A;CLK LOW
+    IN A,(C)
+    AND $04
+    OR B
+    RLCA
+    LD B,A
+    LD A,$02
+	OUT (C),A;CLK HIGH
+    
+    ;BIT 4
+    LD A,$00
+	OUT (C),A;CLK LOW
+    IN A,(C)
+    AND $04
+    OR B
+    RLCA
+    LD B,A
+    LD A,$02
+	OUT (C),A;CLK HIGH
+    
+    ;BIT 5
+    LD A,$00
+	OUT (C),A;CLK LOW
+    IN A,(C)
+    AND $04
+    OR B
+    RLCA
+    LD B,A
+    LD A,$02
+	OUT (C),A;CLK HIGH
+    
+    ;BIT 6
+    LD A,$00
+	OUT (C),A;CLK LOW
+    IN A,(C)
+    AND $04
+    OR B
+    RLCA
+    LD B,A
+    LD A,$02
+	OUT (C),A;CLK HIGH
+    
+    ;BIT 7
+    LD A,$00
+	OUT (C),A;CLK LOW
+    IN A,(C)
+    AND $04
+    OR B  
+    RRCA
+    RRCA
+    LD B,A
+    LD A,$02
+	OUT (C),A;CLK HIGH
+    LD A,B
+    
+	RET
+    
+;Inicializa o Cartão SD
+SDCardInit:
+
+    LD HL,SDCINIT1;Envia mensagem de status
+    CALL DisplayString
+    
+    LD C,$C0;Posição de memorio
+    LD B,$00
+    OUT (C),B
+    
+    ;LD B,$65;Contador do loop
+    LD B,$0B
+    LD A,$09
+SDCardInitLoop:;Envia 100 Clocks para o cartão SD
+	;DEC B
+	;LD A,$09
+	OUT (C),A
+    ;LD A,$0B
+	OUT (C),B
+    ;LD A,$00
+    ;CP B
+    ;JP SDCardInitLoop;Verifica se B=0, se sim termina o loop
+    LD HL,OK;Envia mensagem de OK
+    CALL DisplayString
+    
+    LD C,$C0
+    LD A,$03
+	OUT (C),A;CS Low    
+    
+    LD HL,SDCINIT2;Envia mensagem de status
+    CALL DisplayString
+    
+    LD C,$C0;Envia CMD0
+    ;Primeiro byte($40)
+    LD A,$40    
+	CALL SPIOUT
+    ;Segundo byte($00)
+    LD A,$00
+    CALL SPIOUT    
+    ;Terceiro byte($00)
+    LD A,$00
+    CALL SPIOUT 
+    ;Quarto byte($00)
+    LD A,$00
+    CALL SPIOUT 
+    ;Quinto byte($00)
+    LD A,$00
+    CALL SPIOUT 
+    ;Sexto byte($95)
+    LD A,$95
+    CALL SPIOUT 
+    
+    CALL SPIIN
+    LD D,A
+    
+    BIT $00,A
+    CALL NZ,SDCInitIdle
+    
+    LD A,D
+    BIT $01,A
+    CALL NZ,SDCInitErase
+    
+    LD A,D
+    BIT $02,A
+    CALL NZ,SDCInitIlligal
+    
+    LD A,D
+    BIT $03,A
+    CALL NZ,SDCInitCRC
+    
+    LD A,D
+    BIT $04,A
+    CALL NZ,SDCInitEraseSeq
+    
+    LD A,D
+    BIT $05,A
+    CALL NZ,SDCInitAddress
+    
+    LD A,D
+    BIT $06,A
+    JP NZ,SDCInitParameter
+    
+    LD HL,OK;Envia mensagem de OK
+    CALL DisplayString
+    
+	RET
+    
+SDCInitIdle:
+    LD HL,SDCIdleMsg
+    CALL DisplayString
+	
+	RET
+    
+SDCInitErase:
+	LD HL,SDCEraseMsg
+    CALL DisplayString
+
+	RET
+    
+SDCInitIlligal:
+	LD HL,SDCIlligalMsg
+    CALL DisplayString
+    
+	RET
+    
+SDCInitCRC:
+	LD HL,SDCCRCMsg
+    CALL DisplayString
+    
+	RET
+    
+SDCInitEraseSeq:
+	LD HL,SDCEraseSeqMsg
+    CALL DisplayString
+    
+	RET
+    
+SDCInitAddress:
+	LD HL,SDCAddressMsg
+    CALL DisplayString
+    
+	RET
+    
+SDCInitParameter:
+	LD HL,SDCParameterMsg
+    CALL DisplayString
+    
+	RET
+
+    
+    ;STRINGS
+INIT1:
+	.DB "Inicializando Sistema...",$0D,$FF
+INIT2:
+	.DB "Joao Pito, 2017.",$0D,$FF
+RAMOK:
+	.DB "32767B RAM OK.",$0D,$FF
+OK:
+	.DB "OK",$0D,$FF
+READY:
+	.DB "READY",$0D,$FF
+    
+;Monitor Strings
+MONITORINIT:
+	.DB "Monitor V1.6",$0D,$FF
+;MONNOTFOUND:
+;	.DB "Comando nao encontrado.",$0D
+
+;Sd Card Strings
+SDCINIT0:
+    .DB "Inicializando Cartao SD",$0D,$FF
+SDCINIT1:
+    .DB "CLKS...",$FF
+SDCINIT2:
+    .DB "CMD0...",$FF
+SDCINIT3:
+    .DB "CMD1...",$FF
+;Error Messages
+SDCIdleMsg:
+	.DB "In Idle State",$0D,$FF
+SDCEraseMsg:
+	.DB "Erase Reset",$0D,$FF
+SDCIlligalMsg:
+	.DB "Illigal Command",$0D,$FF
+SDCCRCMsg:
+	.DB "Command CRC Error",$0D,$FF
+SDCEraseSeqMsg:
+	.DB "Erase Sequence Error",$0D,$FF
+SDCAddressMsg:
+	.DB "Address Error",$0D,$FF
+SDCParameterMsg:
+	.DB "Parameter Error",$0D,$FF
+
+HelloWorld:
+	.DB "Hello World!",$0D,$FF
+    
+HELLOWORLD1:
+    LD HL,HelloWorld
+    CALL DisplayString
+    JP HELLOWORLD1
+    
+    
+    
+    
+    

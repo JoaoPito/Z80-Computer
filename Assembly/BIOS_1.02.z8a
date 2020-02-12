@@ -1,0 +1,692 @@
+;Versao 1.02 22/04/2017
+
+;Faz as rotinas de boot e salta para o programa
+Boot:
+LD HL,videoPortAdd
+LD (8000h),HL
+CALL ClearMem
+;Inicializa Cartão SD
+;Inicializa FAT16
+;Inicializa SO,senao inicia o menu da BIOS
+JP MainMenu
+
+;CONVERSAO NUMERICA:
+
+;Converte um numero binário para BCD
+BinToBcd: 
+LD BC,1000H
+LD DE,0
+cvtLoop:
+ADD HL,HL
+LD A,E
+ADC A,A
+DAA
+LD E,A
+LD A,D
+ADC A,A
+DAA
+LD D,A
+LD A,C
+ADC A,A
+DAA
+LD C,A
+DJNZ cvtLoop
+EX DE,HL
+RET
+
+;Converte BCD para caracteres ASCII
+BcdToASCII: 
+LD A,C
+CALL cvtUpperNibble
+LD A,C
+CALL cvtLowerNibble
+LD A,H
+CALL cvtUpperNibble
+LD A,H
+CALL cvtLowerNibble
+LD A,L
+CALL cvtUpperNibble
+LD A,L
+CALL cvtLowerNibble
+
+cvtUpperNibble: ;Move o nibble acima para o nibble abaixo
+RRA
+RRA
+RRA
+RRA
+
+cvtLowerNibble: ;Converte o nibble abaixo para ASCII e copia para a memoria
+AND 0FH
+ADD A,90H
+DAA
+ADC A,40H
+DAA
+LD (DE),A
+INC DE
+RET
+
+;Converte caracteres ASCII em Binario
+ASCIIToBin: 
+LD A,D
+CALL Hex1
+ADD A,A
+ADD A,A
+ADD A,A
+ADD A,A
+LD D,A
+LD A,E
+CALL Hex1
+OR D
+RET
+
+Hex1:
+SUB 30H
+CP 10
+RET C
+SUB 7
+RET
+
+;CONTROLE:
+
+;Escreve 00h em todos os endereços de memoria
+ClearMem:
+LD A,00h
+LD HL,1FFFh
+ClearMemLoop: ;Loop para escrever e decrementar o contador HL
+LD (HL),A
+INC HL
+CP H
+JR NZ,ClearMemLoop
+RET
+
+
+;PERIFERICOS
+
+;Mostra o caractere em A no display padrão
+DisplayChar:
+LD DE,(8000H)
+LD (DE),A
+INC DE
+LD (8000H),DE
+RET
+
+;Mostra uma string endereçada em HL no display padrão
+DisplayString:
+LD DE,(8000H)
+LD A,03h
+LDI
+CP(HL)
+JP NZ,DisplayString
+RET
+
+;Processo para apagar um caractere
+Backspace:
+LD DE,(8000H)
+DEC DE
+LD A,00h
+LD (DE),A
+LD (8000H),DE
+RET
+
+;Le a tecla pressionada no teclado e retorna em A (ASCII)
+GetKey:
+GetKeyCol01:
+IN A,(01h)
+CP 00h
+JP Z,GetKeyCol02
+CP 01h
+JP Z,Key1
+CP 02h
+JP Z,Key2
+CP 04h
+JP Z,Key3
+CP 08h
+JP Z,Key4
+CP 10h
+JP Z,Key5
+CP 20h
+JP Z,Key6
+CP 40h
+JP Z,Key7
+CP 80h
+JP Z,Key8
+GetKeyCol02:
+IN A,(02h)
+CP 00h
+JP Z,GetKeyCol03
+CP 01h
+JP Z,KeySettings
+CP 02h
+JP Z,Keyq
+CP 04h
+JP Z,Keyw
+CP 08h
+JP Z,Keye
+CP 10h
+JP Z,Keyr
+CP 20h
+JP Z,Keyt
+CP 40h
+JP Z,Key0
+CP 80h
+JP Z,Key9
+GetKeyCol03:
+IN A,(04h)
+CP 00h
+JP Z,GetKeyCol04
+CP 01h
+JP Z,KeyLogo
+CP 02h
+JP Z,Keyk
+CP 04h
+JP Z,Keyl
+CP 08h
+JP Z,Keyp
+CP 10h
+JP Z,Keyo
+CP 20h
+JP Z,Keyi
+CP 40h
+JP Z,Keyu
+CP 80h
+JP Z,Keyy
+GetKeyCol04:
+IN A,(08h)
+CP 00h
+JP Z,GetKeyCol05
+CP 01h
+JP Z,KeyDemo
+CP 02h
+JP Z,Keya
+CP 04h
+JP Z,Keys
+CP 08h
+JP Z,Keyd
+CP 10h
+JP Z,Keyf
+CP 20h
+JP Z,Keyg
+CP 40h
+JP Z,Keyh
+CP 80h
+JP Z,Keyj
+GetKeyCol05:
+IN A,(10h)
+CP 00h
+JP Z,GetKeyCol06
+CP 01h
+JP Z,KeyHelp
+CP 02h
+JP Z,Keyz
+CP 04h
+JP Z,Keyx
+CP 08h
+JP Z,Keyc
+CP 10h
+JP Z,Keyv
+CP 20h
+JP Z,Keyb
+CP 40h
+JP Z,Keyn
+CP 80h
+JP Z,Keym
+GetKeyCol06:
+IN A,(20h)
+CP 00h
+JP Z,GetKeyCol07
+CP 01h
+JP Z,KeyMainMenu
+CP 02h
+JP Z,KeySpace
+CP 04h
+JP Z,KeyTriangle
+CP 08h
+JP Z,KeyRBatman
+CP 10h
+JP Z,KeySquare
+CP 20h
+JP Z,KeyCircle
+CP 40h
+JP Z,KeyAnswer
+CP 80h
+JP Z,KeyBackspace
+GetKeyCol07:
+IN A,(40h)
+CP 01h
+JP Z,KeyRepeat
+CP 02h
+JP Z,KeyPBracketsOp
+CP 04h
+JP Z,KeyPBracketsClo
+CP 08h
+JP Z,KeyDown
+CP 10h
+JP Z,KeyRight
+CP 20h
+JP Z,KeyLeft
+CP 40h
+JP Z,KeyUp
+CP 80h
+JP Z,KeyEnter
+RET
+
+;Traducao do Key Code para ASCII
+
+;Especiais
+KeyDemo:;Demo=NO KEY
+;LD A,09h
+RET
+KeyHelp:;Help=NO KEY
+;LD A,09h
+RET
+KeyRepeat:;Repeat=NO KEY
+;LD A,09h
+RET
+KeyAnswer:;Answer=NO KEY
+;LD A,0Fh
+RET
+KeyTriangle:;Triangle=NO KEY
+;LD A,0Fh
+RET
+KeyRBatman:;R_Batman=NO KEY
+;LD A,0Fh
+RET
+KeySquare:;Square=NO KEY
+;LD A,0Fh
+RET
+KeyCircle:;Circle=NO KEY
+;LD A,0Fh
+RET
+KeyDown:;Down=NO KEY
+;LD A,0Fh
+RET
+KeyRight:;Right=NO KEY
+;LD A,0Fh
+RET
+KeyLeft:;Left=NO KEY
+;LD A,0Fh
+RET
+KeyUp:;Up=NO KEY
+;LD A,0Fh
+RET
+
+KeySettings:;Settings=TAB
+LD A,09h
+RET
+KeyLogo:;Logo=CAPS LOCK
+LD A,0Fh;Shift In Code
+RET
+KeyBackspace:;Logo=CAPS LOCK
+LD A,08h
+RET
+KeyEnter:;Logo=CAPS LOCK
+LD A,0Dh;Carriage Return
+RET
+KeyMainMenu:;Main Menu=CTRL
+LD A,11h;Device Control 1
+RET
+KeySpace:
+LD A,20h
+RET
+
+;Numeros
+Key1:
+LD A,31h
+RET
+Key2:
+LD A,32h
+RET
+Key3:
+LD A,33h
+RET
+Key4:
+LD A,34h
+RET
+Key5:
+LD A,35h
+RET
+Key6:
+LD A,36h
+RET
+Key7:
+LD A,37h
+RET
+Key8:
+LD A,38h
+RET
+Key9:
+LD A,39h
+RET
+Key0:
+LD A,30h
+RET
+
+;Letras
+Keya:
+LD A,61h
+RET
+Keyb:
+LD A,62h
+RET
+Keyc:
+LD A,63h
+RET
+Keyd:
+LD A,64h
+RET
+Keye:
+LD A,65h
+RET
+Keyf:
+LD A,66h
+RET
+Keyg:
+LD A,67h
+RET
+Keyh:
+LD A,68h
+RET
+Keyi:
+LD A,69h
+RET
+Keyj:
+LD A,6Ah
+RET
+Keyk:
+LD A,6Bh
+RET
+Keyl:
+LD A,6Ch
+RET
+Keym:
+LD A,6Dh
+RET
+Keyn:
+LD A,6Eh
+RET
+Keyo:
+LD A,6Fh
+RET
+Keyp:
+LD A,70h
+RET
+Keyq:
+LD A,71h
+RET
+Keyr:
+LD A,72h
+RET
+Keys:
+LD A,73h
+RET
+Keyt:
+LD A,74h
+RET
+Keyu:
+LD A,75h
+RET
+Keyv:
+LD A,76h
+RET
+Keyw:
+LD A,77h
+RET
+Keyx:
+LD A,78h
+RET
+Keyy:
+LD A,79h
+RET
+Keyz:
+LD A,7Ah
+RET
+
+;Outros
+KeyExcl:;!
+LD A,21h
+RET
+KeyAtSign:;@
+LD A,40h
+RET
+KeyNumbSign:;#
+LD A,23h
+RET
+KeyDollar:;$
+LD A,24h
+RET
+KeyPercent:;%
+LD A,25h
+RET
+KeyQuot:;"
+LD A,22h
+RET
+KeyAmp:;&
+LD A,26h
+RET
+KeyAst:;*
+LD A,2Ah
+RET
+KeyParentOp:;(
+LD A,28h
+RET
+KeyParentClo:;)
+LD A,29h
+RET
+KeyPBracketsOp:;<
+LD A,3Ch
+RET
+KeyPBracketsClo:;>
+LD A,3Eh
+RET
+KeyBracesOp:;{
+LD A,7Bh
+RET
+KeyVBar:;|
+LD A,7Ch
+RET
+KeyBraceClo:;}
+LD A,7Dh
+RET
+
+;Serial Output(LSB FIRST)
+;A-Byte a ser carregado, C-endereço I/O
+SerialOutLSB:
+LD B,A
+RES 2,B ;CLK LOW
+OUT(C),B ;ENVIA O 1º BIT(CLK LOW)
+SET 2,B ;CLK HIGH
+OUT(C),B ;ENVIA O 1º BIT(CLK HIGH)
+RRA ;COMECA A PROCESSAR O 2º BIT
+LD B,A
+RES 2,B
+OUT(C),B
+SET 2,B
+OUT(C),B
+RRA ;COMECA A PROCESSAR O 4º BIT
+LD B,A
+RES 2,B
+OUT(C),B
+SET 2,B
+OUT(C),B
+RRA ;COMECA A PROCESSAR O 5º BIT
+LD B,A
+RES 2,B
+OUT(C),B
+SET 2,B
+OUT(C),B
+RRA ;COMECA A PROCESSAR O 6º BIT
+LD B,A
+RES 2,B
+OUT(C),B
+SET 2,B
+OUT(C),B
+RRA ;COMECA A PROCESSAR O 7º BIT
+LD B,A
+RES 2,B
+OUT(C),B
+SET 2,B
+OUT(C),B
+RRA ;COMECA A PROCESSAR O 8º BIT
+LD B,A
+RES 2,B
+OUT(C),B
+SET 2,B
+OUT(C),B
+RET
+
+;Variaveis
+
+videoPortAdd:;Endereço da porta para vídeo
+DB 4000h
+
+;Mensagens a ser exibidas
+
+INIT1:
+DB "Iniciando Sistema...",0Dh
+INIT2:
+DB "Joao Pito, 2017",0Dh
+RAMOK:
+DB "32767B RAM OK",0Dh
+
+MENUTITLE:
+DB "Escolha uma das opcoes abaixo:",0Dh
+MENUOPT1:
+DB "1. Iniciar Monitor",0Dh
+MENUOPT2:
+DB "2. Iniciar BASIC",0dh
+MENUOPT3:
+DB "3. Executar MBR no Cartao SD",0Dh
+MENUOPT4:
+DB "4. Executar arquivo no Cartao SD",0Dh
+MONINIT:
+DB "Iniciando Monitor v1.0",0Dh
+MONHELP:
+DB "Digite H para ajuda",0Dh
+MONNOTFOUND
+DB "Comando nao encontrado",0Dh
+
+;Menu principal Init
+InitMainMenu:
+
+;Menu Loop
+MainMenu:
+CALL GetKey
+
+JP MainMenu
+
+;Programas
+
+
+;Monitor Init
+InitMonitor:;Inicializa o monitor
+LD HL,FFEAh ;Inicializa o cursor(18 caracteres)
+LD (FFFEh),HL
+LD A,01h
+ClearBufLoop:;Limpa o buffer de comando
+LD (HL),00h
+INC A
+INC HL
+CP 12h
+JP NZ,ClearBufLoop
+;Coloca o marcador de linha no display(>)
+LD A,3Eh
+CALL DisplayChar
+
+;Monitor loop
+Monitor:
+CALL GetKey
+;Verifica se alguma tecla foi pressionada
+CP 00H
+JP Z,Monitor;Senao, volta para o loop
+;Verifica se o ENTER foi pressionado
+CP 0Dh ;Compara o reg A com 0Dh(Carriage Return)
+JP Z,MonExecCom ;Se for igual, executa o comando
+;Verifica se o BACKSPACE foi pressionado
+CP 08h ;Compara o reg A com 08h(Backspace)
+JP Z,MonBckspcCom ;Se for igual, executa o comando para apagar
+;Verifica se ESC foi pressionado(Volta para o menu)
+CP 1Bh
+JP Z,MainMenu
+;Se nenhuma condicao acima for aceita, coloca o caractere no buffer
+MonBufferChar:
+LD HL,(FFFEh);Carrega o cursor do buffer em HL
+LD (HL),A;Carrega o caractere no buffer
+INC HL
+LD (FFFEh),HL;Carrega HL no cursor
+CALL DisplayChar;Coloca o caractere no display
+LD DE,FFFEh
+SBC HL,DE;Verifica se o limite de caracteres foi ultrapassado
+JP Z,MonExecCom;Se sim, executa o comando
+;Senao, volta a procurar caracteres
+JP Monitor;Fecha o loop
+
+
+MonExecCom: ;Executa o comando digitado pelo usuario
+;Verifica se o comando DUMP foi executado(tecla D ou d)
+LD A,44h ;Carrega A com 'D' ASCII
+LD BC,13 ;Carrega BC com o numero de caracteres do buffer(19)
+LD HL,FFEAh ;Carrega HL com o end. do comeco do buffer
+CPIR ;Procura no buffer a letra D
+JP Z,MonDump ;Se sim, salta para o comando DUMP
+LD A,64h ;Senao, verifica se foi pressionado o botao "d"
+LD BC,13
+LD HL,FFEAh
+CPIR ;Procura no buffer a letra d
+JP Z,MonDump ;Se sim, salta para o comando DUMP
+
+;Verifica se o comando WRITE foi executado(tecla D ou d)
+LD A,57h ;Carrega A com 'W' ASCII
+LD BC,13
+LD HL,FFEAh 
+CPIR ;Procura no buffer a letra W
+JP Z,MonDump
+LD A,77h ;Senao, verifica se foi pressionado o botao "w"
+LD BC,13
+LD HL,FFEAh
+CPIR ;Procura no buffer a letra w
+JP Z,MonWrite ;Se sim, salta para o comando WRITE
+
+;Verifica se o comando RUN foi executado(tecla D ou d)
+LD A,52h ;Carrega A com 'R' ASCII
+LD BC,13 
+LD HL,FFEAh 
+CPIR ;Procura no buffer a letra R
+JP Z,MonDump
+LD A,72h ;Senao, verifica se foi pressionado o botao "r"
+LD BC,13
+LD HL,FFEAh
+CPIR ;Procura no buffer a letra r
+JP Z,MonRun ;Se sim, salta para o comando RUN
+
+;Apaga os dados do buffer
+
+JP Monitor
+
+;DUMP COMMAND
+MonDump:
+
+JP Monitor
+;WRITE COMMAND
+MonWrite:
+
+JP Monitor
+;RUN COMMAND
+MonRun:
+
+JP Monitor
+;LOAD COMMAND
+MonLoad:
+
+JP Monitor
+;BOOT COMMAND
+MonBoot:
+
+JP Monitor
+;CLEAR COMMAND
+MonClear:
+
+JP Monitor
+
+MonBckspcCom: ;Chama a co-rotina do Backspace
+CALL Backspace
+JP Monitor

@@ -1,0 +1,1536 @@
+;Display e teclado por conexão serial RS232
+
+;$00 - Porta RS232/RAM Switch
+
+;Constantes
+#define RAM 30
+#define KeyboardBuffer $FFFD;Keyboard Buffer->$FFFD/$FFFE/$FFFF
+
+#define PS2Port $00;Nao implementado
+#define RS232Port $00 ;Porta RS232
+#define SDCardPort $C0;Nao implementado
+
+#define CPMRAMPos ((RAM-7)*1024)+8000;CP/M Position in RAM(BANK 0)
+
+    ;BIOS Jump Table
+    JP Startup;$0000(COLD BOOT)
+    JP DisplayChar;$0003
+    JP DisplayString;$0006
+    JP GetKey;$0009
+    
+    ;CP/M Jump Table
+	JP	WBOOT	;warm start($000C)
+	JP	CONST	;console status($000F)
+	JP	CONIN	;console character in($0012)
+	JP	CONOUT	;console character out($0015)
+	JP	LIST	;list character out($0018)
+	JP	PUNCH	;punch character out($001B)
+	JP	READER	;reader character out($001E)
+	JP	HOME	;move head to home position($0021)
+	JP	SELDSK	;select disk($0024)
+	JP	SETTRK	;set track number($0027)
+    JP	SETSEC	;set sector number($002A)
+	JP	SETDMA	;set dma address($002D)
+    
+    ;Keyboard Interrupt($0032)
+ 	.DS $2,$00    
+    JP KbrdGetKey
+    
+    ;CP/M Jump Table
+    
+	JP	READ	;read disk($0035)
+	JP	WRITE	;write disk($0038)
+	JP	LISTST	;return list status($003B)
+	JP	SECTRAN	;sector translate($003E)
+    
+Startup:
+	LD SP,$FFFC ;Comeco do Stack
+    IM 1
+    DI
+
+    LD HL,INIT
+    CALL DisplayString
+MemoryCheck:;Escreve 00h em todos os endereços de memoria
+    
+	LD HL,RAMCHK
+    CALL DisplayString
+	
+	LD A,$00
+	LD HL,$2000  ;Endereço para iniciar a checagem de memória
+MemoryCheckLoop: ;Loop para escrever e incrementar o contador HL
+	LD  (HL),A
+	INC HL
+	CP  H
+	JP  NZ,MemoryCheckLoop 
+    
+ 	LD  HL,OK
+    CALL DisplayString 
+    
+    EI
+;/////////MAIN MENU////////////
+Menu:
+
+	LD HL,MENUINIT;Exibe mensagem de boas-vindas
+    CALL DisplayString
+    ;Exibe opcoes
+    LD HL,MENUOPT1
+    CALL DisplayString
+	LD HL,MENUOPT2
+    CALL DisplayString
+    LD HL,MENUOPT3
+    CALL DisplayString
+    LD HL,MENUEND;Exibe mensagem para usuario
+    CALL DisplayString
+    
+MenuGetKey:
+    CALL GetKey;Espera por input
+    
+    SBC A,$20;Verifica se a tecla apertada e >$20
+    JP M,MenuGetKey
+    JP Z,MenuGetKey
+    
+    PUSH AF
+    CALL DisplayChar
+    POP AF
+    
+	CP '1' ;Compara o reg A com 1(RAM Monitor)
+	JP Z,Monitor  ;Se for igual, executa o comando
+    
+	CP '2' ;Compara o reg A com 2(Geren. Arquivos)
+	JP Z,$00  ;Se for igual, executa o comando
+    
+    CP '3' ;Compara o reg A com 3(CP/M)
+	JP Z,BOOTCPM  ;Se for igual, executa o comando
+    
+    JP Menu
+	
+    
+;Menu Strings
+MENUINIT:
+	.DB $0D,"Bootloader Menu",$0D,$FF
+MENUEND:
+	.DB $0D,"Escolha uma das opcoes acima: ",$FF
+MENUOPT1:
+	.DB $0D,"    1. RAM Monitor",$0D,$FF
+MENUOPT2:
+	.DB $0D,"    2. Gerenciador de Arquivos(NI)",$0D,$FF
+MENUOPT3:
+	.DB $0D,"    3. CP/M 2.2(NA)",$0D,$FF
+    
+    
+;/////////MONITOR///////////
+;Versao 2.01 30/10/2017
+
+#define charBuffer $7F ;Tamanho do buffer de comandos(128 caracteres)
+#define buffer $8000+charBuffer+$1 ;Cursor/Buffer 1
+#define comBuffer1 buffer+$2 ;Buffer 2(16 bits)
+#define comBuffer2 comBuffer1+$2 ;Buffer 3(16 bits)
+#define comBuffer3 comBuffer2+$2 ;Buffer 4(16 bits)
+    
+    
+Monitor:
+    LD HL,MONINIT
+    CALL DisplayString
+    
+InitPrompt:;Volta para o prompt
+    LD HL,$8000 ;Inicializa o cursor(19 caracteres)
+    LD A,$00
+    LD (buffer),HL
+ClearBufLoop:;Limpa o buffer de comando
+    LD (HL),$30
+    INC A
+    INC HL
+    CP charBuffer+1
+    JP NZ,ClearBufLoop
+;Coloca o marcador de linha no display(>)
+    LD A,'>'
+    CALL DisplayChar
+ 
+;Monitor loop
+MonitorLoop:
+	CALL GetKey;Espera por input
+    
+	;Verifica se o ENTER foi pressionado
+	CP $0D ;Compara o reg A com 0Dh(Carriage Return)
+	JP Z,MonExecCom ;Se for igual, executa o comando
+	;Verifica se o BACKSPACE foi pressionado
+	CP $7F ;Compara o reg A com 7Fh(DELETE)
+	JP Z,MonBckspcCom ;Se for igual, executa o comando para apagar
+    
+	;Se nenhuma condicao acima for aceita, coloca o caractere no buffer
+MonBufferChar:
+	LD HL,(buffer);Carrega o cursor do buffer em HL
+	LD (HL),A;Carrega o caractere no buffer
+	INC HL
+	LD (buffer),HL;Carrega HL no cursor
+	CALL DisplayChar;Coloca o caractere no display
+	LD DE,buffer
+	SBC HL,DE;Verifica se o limite de caracteres foi ultrapassado
+	JP Z,MonExecCom;Se sim, executa o comando
+	;Senao, volta a procurar caracteres
+	JP MonitorLoop;Fecha o loop
+ 
+MonExecCom:
+    LD HL,$8000 ;Carrega HL com o end. do comeco do buffer
+    LD B,charBuffer ;Carrega B com o numero de caracteres do buffer(128)
+    
+MonExecComLoop:
+    ;Verifica se o comando DUMP foi executado
+	LD A,'D' ;Carrega A com 'D' ASCII	
+    CP (HL)
+    JP Z,MonDump
+    LD A,$64 ;Carrega A com 'd' ASCII	
+    CP (HL)
+    JP Z,MonDump
+    
+    ;Verifica se o comando WRITE foi executado
+	LD A,'W' ;Carrega A com 'W' ASCII
+    CP (HL)
+    JP Z,MonWrite
+    LD A,$77 ;Carrega A com 'w' ASCII
+    CP (HL)
+    JP Z,MonWrite
+    
+    ;Verifica se o comando RUN foi executado
+	LD A,'R' ;Carrega A com 'R' ASCII
+    CP (HL)
+    JP Z,MonRun
+    LD A,$72 ;Carrega A com 'r' ASCII
+    CP (HL)
+    JP Z,MonRun
+    
+    ;Verifica se o comando OUT foi executado
+	LD A,'O' ;Carrega A com 'O' ASCII
+    CP (HL)
+    JP Z,MonOut
+    LD A,$6F ;Carrega A com 'o' ASCII
+    CP (HL)
+    JP Z,MonOut
+    
+    ;Verifica se o comando IN foi executado
+	LD A,'I' ;Carrega A com 'I' ASCII
+    CP (HL)
+    JP Z,MonIn
+    LD A,$69 ;Carrega A com 'i' ASCII
+    CP (HL)
+    JP Z,MonIn
+    
+    ;Verifica se o comando COPY foi executado
+	LD A,'C' ;Carrega A com 'C' ASCII
+    CP (HL)
+    JP Z,MonCopy
+    LD A,$63 ;Carrega A com 'C' ASCII
+    CP (HL)
+    JP Z,MonCopy
+    
+    ;Verifica se o comando BOOT foi executado
+	LD A,'B' ;Carrega A com 'B' ASCII
+    CP (HL)
+    JP Z,MonBoot
+    
+    INC HL;Incrementa HL
+    DEC B;Decrementa B 
+    LD A,$00
+    CP B;Verifica se HL nao passou do buffer
+    JP NZ,MonExecComLoop;Senao, repete o loop
+    
+    JP Z,MonNotFound
+ 
+;DUMP COMMAND
+MonDump:
+	INC HL
+    LD A,$20 ;Verifica se existe um espaço($20) depois da letra d
+    CP (HL)
+    JP nz,MonNotFound;Senão, limpa o buffer e volta para o monitor
+    
+    INC HL;Pega o primeiro endereço escrito no buffer e converte em binario(Primeiro byte)
+    LD D,(HL)
+    INC HL
+    LD E,(HL)
+    CALL ASCIIToBin
+    LD B,A    
+    INC HL;Segundo byte
+    LD D,(HL)
+    INC HL
+    LD E,(HL)
+    LD (buffer),HL
+    CALL ASCIIToBin
+    LD H,B
+    LD L,A
+    LD (comBuffer1),HL
+    
+    LD HL,(buffer)
+    INC HL
+    LD A,$20 ;Verifica se existe um espaço($20) depois do primeiro endereço
+    CP (HL)
+    JP nz,MonDump1Add;Senão, exibe o primeiro endereço
+    
+    INC HL;Pega o segundo numero escrito no buffer e converte em binario(Primeiro byte)
+    LD D,(HL)
+    INC HL
+    LD E,(HL)
+    CALL ASCIIToBin
+    LD (comBuffer2),A;Armazena o numero de bytes no buffer 2
+    
+    LD HL,(comBuffer1);Carrega o endereço inicial em HL    
+    
+MonDumpAdd:	
+    ;Mostra o endereço no display
+    
+    LD A,$00;Zera o contador de colunas
+    LD (comBuffer3),A
+    
+    LD A,$0D;Pula uma linha
+    CALL DisplayChar
+    
+    LD A,'$'
+    CALL DisplayChar
+    
+    LD A,H;Primeiro byte
+    CALL BinToASCII
+    LD A,D
+    CALL DisplayChar
+    LD A,E
+    CALL DisplayChar
+    
+    LD A,L;Segundo byte
+    CALL BinToASCII
+    LD A,D
+    CALL DisplayChar
+    LD A,E
+    CALL DisplayChar
+    
+    LD A,':'
+    CALL DisplayChar    
+    
+MonDumpData:
+    ;Mostra os dados do endereço no display
+    LD A,' '
+    CALL DisplayChar
+    
+    LD A,(HL)
+    CALL BinToASCII
+    LD A,D
+    CALL DisplayChar
+    LD A,E
+    CALL DisplayChar
+    LD A,(comBuffer2);Verifica quantos bytes foram exibidos
+    CP $00
+    JP z,MonDumpDataFinish;Se for igual a 0, termina o loop
+    INC HL
+    DEC A
+    LD (comBuffer2),A
+    
+    LD DE,comBuffer3;Verifica o contador de colunas
+    EX DE,HL
+    LD B,(HL)
+    LD A,$0F
+    INC (HL)
+    EX DE,HL     
+    CP B
+    JP Z,MonDumpAdd;Se =8 salta para a função para exibir o endereço    
+    
+    JP MonDumpData
+    
+MonDumpDataFinish:
+    LD A,$0D
+    CALL DisplayChar    
+	JP InitPrompt
+    
+MonDump1Add:;Funcao para exibir somente 1 endereço
+    LD HL,(comBuffer1);Carrega o endereço inicial em HL
+    LD A,$00
+    LD (comBuffer2),A
+    JP MonDumpAdd
+    
+    
+;WRITE COMMAND
+MonWrite:
+	INC HL
+	LD A,$20 ;Verifica se existe um espaço($20) depois da letra d
+    CP (HL)
+    JP nz,MonNotFound;Senão, limpa o buffer e volta para o monitor    
+    
+    INC HL;Pega o endereço escrito no buffer e converte em binario(Primeiro byte)
+    LD D,(HL)
+    INC HL
+    LD E,(HL)
+    CALL ASCIIToBin
+    LD B,A    
+    INC HL;Segundo byte
+    LD D,(HL)
+    INC HL
+    LD (buffer),HL
+    LD E,(HL)
+    CALL ASCIIToBin    
+    LD H,B
+    LD L,A
+    LD (comBuffer1),HL
+    
+    LD HL,(buffer) 
+    INC HL
+    LD A,$20 ;Verifica se existe um espaço($20) depois do endereço
+    CP (HL)
+    JP nz,MonNotFound;Senão, limpa o buffer e volta para o monitor
+    
+MonWriteData:
+
+    INC HL
+    LD D,(HL)
+    INC HL
+    LD E,(HL)
+    CALL ASCIIToBin
+    
+    LD DE,(comBuffer1)
+    LD (DE),A;Escreve o valor no endereço    
+    INC DE;Incrementa o endereço
+    LD (comBuffer1),DE
+    
+    INC HL
+    LD A,$20 ;Verifica se existe um espaço($20) depois do endereço
+    CP (HL)
+    JP z,MonWriteData
+    JP MonWriteFinish;Senão, termina o comando
+    
+MonWriteFinish:    
+    LD A,$0D
+    CALL DisplayChar
+    LD A,'O'
+    CALL DisplayChar
+    LD A,'K'
+    CALL DisplayChar
+    LD A,$0D
+    CALL DisplayChar
+    
+	JP InitPrompt
+    
+;RUN COMMAND
+MonRun:
+	INC HL
+ 	LD A,$20 ;Verifica se existe um espaço($20) depois da letra R
+    CP (HL)
+    JP nz,MonNotFound;Senão, limpa o buffer e volta para o monitor
+    
+    INC HL;Pega o endereço escrito no buffer e converte em binario(Primeiro byte)
+    LD D,(HL)
+    INC HL
+    LD E,(HL)
+    CALL ASCIIToBin
+    LD B,A    
+    INC HL;Segundo byte
+    LD D,(HL)
+    INC HL
+    LD E,(HL)
+    CALL ASCIIToBin
+    LD H,B
+    LD L,A
+    
+    JP (HL)
+    
+;OUTPUT COMMAND
+MonOut:
+	INC HL
+	LD A,$20 ;Verifica se existe um espaço($20) depois da letra o
+    CP (HL)
+    JP nz,MonNotFound;Senão, limpa o buffer e volta para o monitor    
+    
+    INC HL;Pega o endereço escrito no buffer e converte em binario
+    LD D,(HL)
+    INC HL
+    LD E,(HL)
+    CALL ASCIIToBin
+    LD (comBuffer1),A
+    
+    INC HL
+    LD A,$20 ;Verifica se existe um espaço($20) depois do endereço
+    CP (HL)
+    JP nz,MonNotFound;Senão, limpa o buffer e volta para o monitor
+    
+MonOutData:
+    INC HL;Pega o dado escrito no buffer e converte em binario
+    LD D,(HL)
+    INC HL
+    LD E,(HL)
+    CALL ASCIIToBin
+    LD (buffer),HL
+    
+    LD HL,comBuffer1
+    LD C,(HL);Carrega C com o endereco da porta I/O
+    OUT (C),A;Escreve o valor na porta I/O    
+    INC C;Incrementa o endereço
+    LD (HL),C
+    
+    LD HL,(buffer)
+    INC HL
+    LD A,$20 ;Verifica se existe um espaço($20) depois dos dados
+    CP (HL)
+    JP z,MonOutData;Se sim, escreve outro byte
+    JP MonOutFinish;Senão, termina o comando
+    
+MonOutFinish:    
+    LD A,$0D
+    CALL DisplayChar
+    LD A,'O'
+    CALL DisplayChar
+    LD A,'K'
+    CALL DisplayChar
+    LD A,$0D
+    CALL DisplayChar
+    
+	JP InitPrompt
+    
+;INPUT COMMAND
+MonIn:
+	INC HL
+	LD A,$20 ;Verifica se existe um espaço($20) depois da letra I
+    CP (HL)
+    JP nz,MonNotFound;Senão, limpa o buffer e volta para o monitor    
+    
+    INC HL;Pega o dado escrito no buffer e converte em binario(Primeiro byte)
+    LD D,(HL)
+    INC HL
+    LD E,(HL)
+    CALL ASCIIToBin
+    LD (comBuffer1),A
+    INC HL;Segundo byte
+    LD D,(HL)
+    INC HL
+    LD E,(HL)
+    CALL ASCIIToBin
+    LD (comBuffer1+1),A
+    
+    INC HL
+    LD A,$20 ;Verifica se existe um espaço($20) depois do endereço
+    CP (HL)
+    JP nz,MonNotFound;Senão, limpa o buffer e volta para o monitor
+    
+    INC HL;Pega o endereço escrito no buffer e converte em binario(Primeiro byte)
+    LD D,(HL)
+    INC HL
+    LD E,(HL)
+    CALL ASCIIToBin
+    LD B,A    
+    INC HL;Segundo byte
+    LD D,(HL)
+    INC HL
+    LD E,(HL)
+    CALL ASCIIToBin
+    LD H,B
+    LD L,A
+    
+    PUSH HL
+    LD HL,MONINPUT;Exibe mensagem de Input
+    CALL DisplayString    
+    
+    LD HL,comBuffer1
+    ;Carrega DE com o numero de bytes a ser recebido
+    LD D,(HL) 
+    INC HL
+    LD E,(HL)
+	    
+    POP HL
+    
+    CALL RS232InString;Recebe os dados pela porta R232
+    
+    LD HL,OK;Exibe Mensagem OK
+    CALL DisplayString
+    
+	JP InitPrompt
+    
+;COPY COMMAND
+MonCopy:
+
+	INC HL
+	LD A,$20 ;Verifica se existe um espaço($20) depois da letra d
+    CP (HL)
+    JP nz,MonNotFound;Senão, limpa o buffer e volta para o monitor    
+    
+    INC HL;Pega o endereço escrito no buffer e converte em binario(Primeiro byte)
+    LD D,(HL)
+    INC HL
+    LD E,(HL)
+    CALL ASCIIToBin
+    LD B,A    
+    INC HL;Segundo byte
+    LD D,(HL)
+    INC HL
+    LD (buffer),HL
+    LD E,(HL)
+    CALL ASCIIToBin    
+    LD H,B
+    LD L,A
+    LD (comBuffer1),HL
+    
+    LD HL,(buffer) 
+    INC HL
+	LD A,$20 ;Verifica se existe um espaço($20) depois da letra d
+    CP (HL)
+    JP nz,MonNotFound;Senão, limpa o buffer e volta para o monitor    
+    
+    INC HL;Pega o endereço escrito no buffer e converte em binario(Primeiro byte)
+    LD D,(HL)
+    INC HL
+    LD E,(HL)
+    CALL ASCIIToBin
+    LD B,A    
+    INC HL;Segundo byte
+    LD D,(HL)
+    INC HL
+    LD (buffer),HL
+    LD E,(HL)
+    CALL ASCIIToBin    
+    LD H,B
+    LD L,A
+    LD (comBuffer2),HL
+    
+    LD HL,(buffer) 
+    INC HL
+	LD A,$20 ;Verifica se existe um espaço($20) depois da letra d
+    CP (HL)
+    JP nz,MonNotFound;Senão, limpa o buffer e volta para o monitor    
+    
+    INC HL;Pega o endereço escrito no buffer e converte em binario(Primeiro byte)
+    LD D,(HL)
+    INC HL
+    LD E,(HL)
+    CALL ASCIIToBin
+    LD B,A    
+    INC HL;Segundo byte
+    LD D,(HL)
+    INC HL
+    LD (buffer),HL
+    LD E,(HL)
+    CALL ASCIIToBin    
+    LD H,B
+    LD L,A
+    LD (comBuffer3),HL
+    
+	;Byte Counter Load
+    LD HL,(comBuffer2)
+    LD DE,(comBuffer1)
+    SBC HL,DE
+    LD (comBuffer3+$2),HL
+    LD BC,(comBuffer3+$2)
+    
+    ;Copy bytes
+    LD DE,(comBuffer3)
+    LD HL,(comBuffer1)
+    LDIR
+    
+    LD A,$0D
+    CALL DisplayChar
+    LD Hl,OK
+    CALL DisplayString
+	
+	JP InitPrompt
+    
+;BOOT COMMAND
+MonBoot:
+    ;Verifica se esta escrito (B)OOT
+	LD A,$4F ;Carrega A com 'O' ASCII
+	INC HL
+    CP (HL)
+	JP NZ,MonNotFound;Senao, salta para MonNotFound
+    
+    ;Verifica se esta escrito (B)OOT
+	LD A,$4F ;Carrega A com 'O' ASCII
+	INC HL
+    CP (HL)
+	JP NZ,MonNotFound;Senao, salta para MonNotFound
+    
+    ;Verifica se esta escrito (B)OOT
+	LD A,$54 ;Carrega A com 'T' ASCII
+	INC HL
+    CP (HL)
+	JP NZ,MonNotFound;Senao, salta para MonNotFound
+    
+    LD A,$0D
+    CALL DisplayChar
+    
+	JP $0000;Reinicia a maquina
+    
+;CLEAR SCREEN COMMAND
+MonClear:
+    
+	JP InitPrompt
+    
+    
+    
+;Backspace
+MonBckspcCom:
+	LD HL,(buffer);Carrega HL com a posição do buffer
+    LD A,$00;Verifica se nao esta no inicio do monitor
+    CP L
+    JP Z,MonitorLoop;Se sim, volta para o prompt
+    
+    LD (HL),$30;Escreve 0(ASCII) na posição
+    DEC HL;Decrementa HL
+    LD (buffer),HL;Escreve HL na posição do buffer atual
+   	LD A,'<'
+    CALL DisplayChar
+	JP MonitorLoop;Volta para o prompt
+    
+;Mensagem comando nao encontrado
+MonNotFound:
+	LD A,$0D
+    CALL DisplayChar
+	LD HL,MONNF
+    CALL DisplayString
+	JP InitPrompt    
+
+;Monitor Strings
+MONINIT:
+	.DB "Monitor V2.01",$0D,$FF    
+MONINPUT:
+	.DB $0D,"Recebendo dados por RS232 - 62500bps",$0D,$FF
+MONNF:
+	.DB $0D,"Comando nao encontrado.",$0D,$FF
+;//////////FIM DO MONITOR///////////
+
+
+
+;////////CP/M//////////
+
+#define ccp (MEM-7)*1024
+#define bdos ccp+$0803
+#define cdisk $8004;address of current disk number 0=a,... l5=p
+#define dmaad $FFFEH
+
+	LD HL,CPMINIT
+    CALL DisplayString
+    
+    LD HL,CPMRAMPos
+    LD DE,
+    
+    CALL RS232InString;Recebe os dados pela porta R232
+    
+    LD HL,OK;Exibe Mensagem OK
+    CALL DisplayString
+
+	
+CPMINIT:
+	.DB "Recebendo o CP/M 2.2 pela porta serial RS232(62500 bps)",$0D,$FF
+
+;BIOS
+
+WBOOT:
+	RET
+	
+CONST:;console status, return 0ffh if character ready, 00h if not
+	LD A,$FF
+	RET
+    
+CONIN:;console character into register a
+    CALL GetKey
+    RET
+    
+CONOUT:	;console character output from register c
+    LD A,C
+    CALL DisplayChar
+	RET
+    
+LIST:;list character from register c	
+	LD A,C
+    RET
+    
+LISTST:	;return list status (0 if not ready, 1 if ready)
+	LD A,$00	 	;0 is always ok to return
+	RET
+    
+PUNCH:	;punch	character from	register C
+	LD	a, c		;character to register a
+	RET
+    
+READER:
+	LD A,26
+    RET
+    
+HOME:
+	RET
+    
+SELDSK:
+	LD HL,$0000
+	RET
+    
+SETTRK:
+	RET
+    
+SETSEC:
+	RET
+    
+SETDMA:
+	RET
+    
+READ:
+	LD A,$01
+	RET
+    
+WRITE:
+	LD A,$01
+	RET
+    
+SECTRAN:
+	LD HL,0
+	RET
+    
+    
+;////////CONVERSAO NUMERICA://///////
+
+; Converte um inteiro para BCD de 6 digitos(1181 Tcycles)
+; input: HL = inteiro a converter
+; output: C:HL = numero BCD de 6 digitos
+; destroi: A,F,B,C,D,E,H,L
+BinToBcd:
+	LD   BC, 16*256+0 ; handle 16 bits, one bit per iteration
+	LD   DE, 0
+cvtLoop:
+	ADD  HL, HL
+	LD   A, E
+	ADC  A, A
+	DAA
+	LD   E, A
+	LD   A, D
+	ADC  A, A
+	DAA
+	LD   D, A
+	LD   A, C
+	ADC  A, A
+	DAA
+	LD   C, A
+	DJNZ cvtLoop
+	EX   DE,HL
+	RET
+    
+;Converte um numero BCD para string ASCII
+;input: DE = Aponta para o end. de memoria da string
+;C:HL = numero a ser convertido
+;output: DE = apontador depois da string ASCII
+;destroi: A,F,D,E
+BcdToASCII: 
+	LD   A,C
+	CALL cvtUpperNibble
+	LD   A,C
+	CALL cvtLowerNibble
+	LD   A,H
+	CALL cvtUpperNibble
+	LD   A,H
+	CALL cvtLowerNibble
+	LD   A,L
+	CALL cvtUpperNibble
+	LD   A,L
+	CALL cvtLowerNibble
+
+cvtUpperNibble: ;Move o nibble acima para o nibble abaixo
+	RRA
+	RRA
+	RRA
+	RRA
+
+cvtLowerNibble: ;Converte o nibble abaixo para ASCII e copia para a memoria
+	AND $0F
+	ADD A,$90
+	DAA
+	ADC A,$40
+	DAA
+	LD (DE),A
+	INC DE
+	RET
+
+;Converte caracteres ASCII em Binario
+;input: DE = ASCII a ser convertido
+;output: A = Numero binario
+ASCIIToBin: 
+	LD   a,d
+    CALL Hex1
+    ADD  a,a
+    ADD  a,a
+    ADD  a,a
+    ADD  a,a
+    LD   d,a
+    LD   a,e
+    CALL Hex1
+    OR   d
+    RET
+
+Hex1:
+	SUB  '0'
+	CP   10
+	RET  c
+	SUB  'A'-'0'-10
+	RET
+    
+;Converte numeros binarios para ASCII
+;input: A = Numero Binario
+;output: DE = Caracteres ASCII
+BinToASCII:   
+	ld c, a   ; a = number to convert
+    call BANum1
+    ld d, a
+    ld a, c
+    call BANum2
+    ld e, a
+    ret  ; return with hex number in de
+
+BANum1:   
+	rra
+    rra
+    rra
+    rra
+BANum2:  
+	or $F0
+    daa
+    add a, $A0
+    adc a, $40 ; Ascii hex at this point (0 to F)   
+    ret
+
+;///////////INPUT/OUTPUT/////////////
+
+;Mostra o caractere em A no display padrão
+DisplayChar:
+	DI
+	PUSH BC
+	LD C,RS232Port
+    LD B,A
+    CALL RS232OUT
+    POP BC
+    EI
+	RET
+
+;Mostra uma string endereçada em HL no display padrão
+DisplayString:
+	DI
+	LD C,RS232Port
+	LD A,$FF
+	CP(HL)
+    RET Z
+    LD B,(HL)
+    CALL RS232OUT
+    INC HL
+	JP NZ,DisplayString
+    EI
+	RET
+    
+;Recebe uma tecla no dispositivos padrão
+GetKey:
+	DI
+	PUSH BC
+    LD C,RS232Port
+    CALL RS232IN
+    POP BC
+    EI
+    RET
+    
+;Recebe uma tecla no teclado PS/2(nao implementado)
+KbrdGetKey:
+	DI;Disable Interrupt(1.6uS)
+    PUSH AF;Push AF to stack(4,4uS)
+    PUSH BC;Push BC to stack(4,4uS)
+    
+    LD B,$00;(2,8uS)        
+    LD C,PS2Port;(2.8uS)    
+    
+    CALL KbrdGetKey_WaitClkLOW;Wait for CLK Low and Receive bit 0(If Z 6.8uS;else 4uS)
+    
+    AND $01;(2.8uS)
+    RRCA;(1.6uS)
+    LD B,A;(1.6uS)
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP;20.8uS delay
+    CALL KbrdGetKey_WaitClkLOW;Wait for CLK Low and Receive bit 1(6.8uS)
+    
+    AND $01;(2.8uS)    
+    OR B;(1.6uS)
+    RRCA;(1.6uS)
+    LD B,A;(1.6uS)
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP;19,2uS delay
+    CALL KbrdGetKey_WaitClkLOW;Wait for CLK Low and Receive bit 2(6.8uS)
+    
+    AND $01;(2.8uS)    
+    OR B;(1.6uS)
+    RRCA;(1.6uS)
+    LD B,A;(1.6uS)
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP;19,2uS delay
+    CALL KbrdGetKey_WaitClkLOW;Wait for CLK Low and Receive bit 3(6.8uS)
+    
+    AND $01;(2.8uS)    
+    OR B;(1.6uS)
+    RRCA;(1.6uS)
+    LD B,A;(1.6uS)
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP;19,2uS delay
+    CALL KbrdGetKey_WaitClkLOW;Wait for CLK Low and Receive bit 4(6.8uS)
+    
+    AND $01;(2.8uS)    
+    OR B;(1.6uS)
+    RRCA;(1.6uS)
+    LD B,A;(1.6uS)
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP;19,2uS delay
+    CALL KbrdGetKey_WaitClkLOW;Wait for CLK Low and Receive bit 5(6.8uS)
+    
+    AND $01;(2.8uS)    
+    OR B;(1.6uS)
+    RRCA;(1.6uS)
+    LD B,A;(1.6uS)
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP;19,2uS delay
+    CALL KbrdGetKey_WaitClkLOW;Wait for CLK Low and Receive bit 6(6.8uS)
+    
+    AND $01;(2.8uS)    
+    OR B;(1.6uS)
+    RRCA;(1.6uS)
+    LD B,A;(1.6uS)
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP;19,2uS delay
+    CALL KbrdGetKey_WaitClkLOW;Wait for CLK Low and Receive bit 7(6.8uS)
+    
+    AND $01;(2.8uS)    
+    OR B;(1.6uS)
+    RRCA;(1.6uS)
+    LD (KeyboardBuffer),A
+    
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    CALL KbrdGetKey_WaitClkLOW;Wait for CLK Low and Receive parity bit(6.8uS)
+        
+KbrdGetKey_StopBit:    
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    CALL KbrdGetKey_WaitClkLOW;Wait for CLK Low and Receive stop bit(6.8uS)
+    BIT $0,A
+    JP Z,KbrdGetKey_StopBit
+    
+KbrdGetKey_Ret:
+	LD A,KeyboardBuffer
+    CALL DisplayChar
+    
+    LD A,'K'
+    CALL DisplayChar
+    
+    POP BC;Pop BC from stack
+    POP AF;Pop AF from stack
+    
+    EI;Enable Interrupt
+    IM 1
+    
+	RET    
+    
+KbrdGetKey_WaitClkLOW:;(TOTAL: 16,4uS)
+    IN A,(C);(4.8uS)
+    BIT $1,A;(7,2uS)
+    RET Z;(If Z 4.4uS; else 2,0uS)
+    JP KbrdGetKey_WaitClkLOW
+	RET
+    
+RS232OUT: ;RS232 Output | B->Output value C->I/O Address (62500Bps@2.5Mhz - 16uS)
+    LD A,$00
+	OUT(C),A ;4.8uS
+    LD A,B;1.6uS 
+    NOP;1.6uS
+    NOP
+    NOP
+    NOP
+    NOP
+	NOP;(TOTAL 16uS)
+     
+	OUT (C),A;BIT 1 4.8uS
+	RRA;1.6uS
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	OUT (C),A
+	RRA
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+	NOP
+	OUT (C),A
+	RRA
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+	NOP
+	OUT (C),A
+	RRA
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+	NOP
+	OUT (C),A
+	RRA
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+	NOP
+	OUT (C),A
+	RRA
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+	NOP
+	OUT (C),A
+	RRA
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+	NOP
+	OUT (C),A
+	RRA
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+	NOP
+	LD A,$01
+	OUT (C),A
+    NOP
+    NOP
+	NOP
+	RET
+    
+RS232IN: ;RS232 Input | A-&gt;Return Value B-&gt;Routine Buffer C-&gt;I/O Address (62500Bps@2.5Mhz - 16uS)
+	LD B,$00
+    LD A,$00
+    LD E,$02
+RS232INStart: ;Start Bit Loop
+    IN A,(C) ;4.8uS
+    CP $FD ;2.8uS
+    JP NZ,RS232INStart ;Loop end 4uS
+    NOP
+    NOP
+    NOP
+    NOP
+    ;18uS TOTAL
+    
+RS232ReceiveByteStart:
+    IN A,(C) ;BIT 0 4.8uS
+    AND E ;1.6uS
+    OR B ;1.6uS
+    RRCA ;1.6uS
+    LD B,A ;1.6uS
+    NOP
+    NOP
+	NOP
+    ;16uS TOTAL
+    
+    IN A,(C) ;BIT 1
+    AND E
+    OR B
+    RRCA
+    LD B,A
+    NOP
+    NOP
+	NOP
+    
+    IN A,(C) ;BIT 2
+    AND E
+    OR B
+    RRCA
+    LD B,A
+    NOP
+    NOP
+	NOP
+    
+    IN A,(C) ;BIT 3
+    AND E
+    OR B
+    RRCA
+    LD B,A
+    NOP
+    NOP
+	NOP
+    
+    IN A,(C) ;BIT 4
+    AND E
+    OR B
+    RRCA
+    LD B,A
+    NOP
+    NOP
+	NOP
+    
+    IN A,(C) ;BIT 5
+    AND E
+    OR B
+    RRCA
+    LD B,A
+    NOP
+    NOP
+	NOP
+    
+    IN A,(C) ;BIT 6
+    AND E
+    OR B
+    RRCA
+    LD B,A
+    NOP
+    NOP
+	NOP
+    
+    IN A,(C) ;BIT 7
+    AND E
+    OR B
+    RRCA
+    RRCA
+    
+    RET
+    
+RS232InString: ;RS232 Input String | HL->String Position B->Routine Buffer DE->Numero bytes (62500Bps)
+    
+    DI
+    PUSH BC
+    PUSH AF
+    
+    INC DE
+    PUSH DE  
+    
+    LD C,RS232Port
+    
+RS232StrStart: ;Start Bit Loop
+    CALL RS232IN;6.8uS    
+    POP DE;***
+    LD (HL),A;4uS  
+    
+    DEC DE;1.6uS
+    INC HL;2.4uS
+    
+    LD A,$00;1.6uS
+    CP E;1.6uS   
+    
+    PUSH DE;***
+    
+    JP NZ,RS232StrStart;4uS(TOTAL 22uS**)
+    
+	CP D;1.6uS ***
+    
+    JP Z,RS232StrRet;4uS ***
+    JP RS232StrStart
+    
+    
+    
+RS232StrRet:
+	POP DE
+    POP AF
+    POP BC
+    EI
+    RET
+    
+    
+SPIOUT: ;SPI Output | A->;Output value C->I/O Address
+    LD B,A
+        
+	;MSB First
+    RLCA;Rotate Left
+    RES $02,A
+	OUT (C),A;BIT 7(CLK LOW)
+    SET $02,A
+	OUT (C),A;BIT 7(CLK HIGH)
+    
+    LD A,B
+    RLCA
+	RLCA    
+	RES $02,A
+	OUT (C),A
+    SET $02,A
+	OUT (C),A
+    
+    LD A,B
+    RLCA
+    RLCA
+	RLCA    
+	RES $02,A
+	OUT (C),A
+    SET $02,A
+	OUT (C),A
+    
+    LD A,B
+    RLCA
+    RLCA
+    RLCA
+	RLCA    
+	RES $02,A
+	OUT (C),A
+    SET $02,A
+	OUT (C),A
+    
+    LD A,B
+    RRCA
+    RRCA
+    RRCA    
+	RES $02,A
+	OUT (C),A
+    SET $02,A
+	OUT (C),A
+    
+    LD A,B
+    RRCA
+    RRCA   
+	RES $02,A
+	OUT (C),A
+    SET $02,A
+	OUT (C),A
+    
+    LD A,B
+    RRCA
+	RES $02,A
+	OUT (C),A
+    SET $02,A
+	OUT (C),A
+    
+	LD A,B    
+	RES $02,A
+	OUT (C),A;BIT 0(CLK LOW)
+    SET $02,A
+	OUT (C),A;BIT 0(CLK HIGH)    
+	RET
+    
+SPIIN: ;SPI Input | A->Return value C->I/O Address
+        
+    LD A,$00;Reset A
+	LD B,$00;MSB First
+    
+    ;BIT 0
+	OUT (C),A;CLK LOW
+    IN A,(C)
+    AND $02
+    RLCA
+    LD B,A
+    LD A,$04
+	OUT (C),A;CLK HIGH
+    
+    ;BIT 1
+    LD A,$00
+	OUT (C),A;CLK LOW
+    IN A,(C)
+    AND $02   
+    OR B   
+    RLCA
+    LD B,A
+    LD A,$04
+	OUT (C),A;CLK HIGH
+    
+    ;BIT 2
+    LD A,$00
+	OUT (C),A;CLK LOW
+    IN A,(C)
+    AND $02
+    OR B
+    RLCA
+    LD B,A
+    LD A,$04
+	OUT (C),A;CLK HIGH
+    
+    ;BIT 3
+    LD A,$00
+	OUT (C),A;CLK LOW
+    IN A,(C)
+    AND $02
+    OR B
+    RLCA
+    LD B,A
+    LD A,$04
+	OUT (C),A;CLK HIGH
+    
+    ;BIT 4
+    LD A,$00
+	OUT (C),A;CLK LOW
+    IN A,(C)
+    AND $02
+    OR B
+    RLCA
+    LD B,A
+    LD A,$04
+	OUT (C),A;CLK HIGH
+    
+    ;BIT 5
+    LD A,$00
+	OUT (C),A;CLK LOW
+    IN A,(C)
+    AND $02
+    OR B
+    RLCA
+    LD B,A
+    LD A,$04
+	OUT (C),A;CLK HIGH
+    
+    ;BIT 6
+    LD A,$00
+	OUT (C),A;CLK LOW
+    IN A,(C)
+    AND $02
+    OR B
+    RLCA
+    LD B,A
+    LD A,$04
+	OUT (C),A;CLK HIGH
+    
+    ;BIT 7
+    LD A,$00
+	OUT (C),A;CLK LOW
+    IN A,(C)
+    AND $02
+    OR B  
+    RRCA
+    RRCA
+    LD B,A
+    LD A,$04
+	OUT (C),A;CLK HIGH
+    LD A,B
+    
+	RET
+    
+
+    
+    ;////////STRINGS/////////
+INIT:
+	.DB "Inicializando Sistema...",$0D,"Joao Pito, 2017.",$0D,$FF
+RAMCHK:
+	.DB "32767B RAM ",$FF
+OK:
+	.DB "OK",$0D,$FF
+READY:
+	.DB "READY",$0D,$FF
+FAILED:
+	.DB "FAILED",$0D,$FF
+    
+        
+HELLOWORLD1:
+    LD HL,HelloWorld
+    CALL DisplayString
+    JP HELLOWORLD1
+   
+HelloWorld:
+	.DB "Hello World!",$0D,$FF
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+   

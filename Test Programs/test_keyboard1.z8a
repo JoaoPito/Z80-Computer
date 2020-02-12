@@ -1,0 +1,387 @@
+LD A,00h
+LD HL,4000h
+LD SP,802Fh
+LD (8000h),HL
+LD (8002h),A
+
+Program:
+CALL GetKey
+CALL DisplayChar
+JP Program
+
+GetKey:
+GetKeyCol01:
+IN A,(01h)
+CP 00h
+JP Z,GetKeyCol02
+CP 01h
+JP Z,Key1
+CP 02h
+JP Z,Key2
+CP 04h
+JP Z,Key3
+CP 08h
+JP Z,Key4
+CP 10h
+JP Z,Key5
+CP 20h
+JP Z,Key6
+CP 40h
+JP Z,Key7
+CP 80h
+JP Z,Key8
+GetKeyCol02:
+IN A,(02h)
+CP 00h
+JP Z,GetKeyCol03
+;CP 01h
+;JP Z,KeySettings
+CP 02h
+JP Z,Keyq
+CP 04h
+JP Z,Keyw
+CP 08h
+JP Z,Keye
+CP 10h
+JP Z,Keyr
+CP 20h
+JP Z,Keyt
+CP 40h
+JP Z,Key0
+CP 80h
+JP Z,Key9
+GetKeyCol03:
+IN A,(04h)
+CP 00h
+JP Z,GetKeyCol04
+;CP 01h
+;JP Z,KeyLogo
+CP 02h
+JP Z,Keyk
+CP 04h
+JP Z,Keyl
+CP 08h
+JP Z,Keyp
+CP 10h
+JP Z,Keyo
+CP 20h
+JP Z,Keyi
+CP 40h
+JP Z,Keyu
+CP 80h
+JP Z,Keyy
+GetKeyCol04:
+IN A,(08h)
+CP 00h
+JP Z,GetKeyCol05
+;CP 01h
+;JP Z,KeyDemo
+CP 02h
+JP Z,Keya
+CP 04h
+JP Z,Keys
+CP 08h
+JP Z,Keyd
+CP 10h
+JP Z,Keyf
+CP 20h
+JP Z,Keyg
+CP 40h
+JP Z,Keyh
+CP 80h
+JP Z,Keyj
+GetKeyCol05:
+IN A,(10h)
+CP 00h
+;JP Z,GetKeyCol06
+;CP 01h
+;JP Z,KeyHelp
+CP 02h
+JP Z,Keyz
+CP 04h
+JP Z,Keyx
+CP 08h
+JP Z,Keyc
+CP 10h
+JP Z,Keyv
+CP 20h
+JP Z,Keyb
+CP 40h
+JP Z,Keyn
+CP 80h
+JP Z,Keym
+GetKeyCol06:
+IN A,(20h)
+CP 00h
+;JP Z,GetKeyCol07
+;CP 01h
+;JP Z,KeyMainMenu
+CP 02h
+JP Z,KeySpace
+;CP 04h
+;JP Z,KeyTriangle
+;CP 08h
+;JP Z,KeyRBatman
+;CP 10h
+;JP Z,KeySquare
+;CP 20h
+;JP Z,KeyCircle
+;CP 40h
+;JP Z,KeyAnswer
+;CP 80h
+;JP Z,KeyBackspace
+;GetKeyCol07:
+;IN A,(40h)
+;CP 01h
+;JP Z,KeyRepeat
+;CP 02h
+;JP Z,KeyPBracketsOp
+;CP 04h
+;JP Z,KeyPBracketsClo
+;CP 08h
+;JP Z,KeyDown
+;CP 10h
+;JP Z,KeyRight
+;CP 20h
+;JP Z,KeyLeft
+;CP 40h
+;JP Z,KeyUp
+;CP 80h
+;JP Z,KeyEnter
+LD A,00h;Null
+JP DebounceCheck
+
+;Traducao do Key Code para ASCII
+
+;Especiais
+KeyDemo:;Demo=NO KEY
+;LD A,09h
+JP DebounceCheck
+KeyHelp:;Help=NO KEY
+;LD A,09h
+JP DebounceCheck
+KeyRepeat:;Repeat=NO KEY
+;LD A,09h
+JP DebounceCheck
+KeyAnswer:;Answer=NO KEY
+;LD A,0Fh
+JP DebounceCheck
+KeyTriangle:;Triangle=NO KEY
+;LD A,0Fh
+JP DebounceCheck
+KeyRBatman:;R_Batman=NO KEY
+;LD A,0Fh
+JP DebounceCheck
+KeySquare:;Square=NO KEY
+;LD A,0Fh
+JP DebounceCheck
+KeyCircle:;Circle=NO KEY
+;LD A,0Fh
+JP DebounceCheck
+KeyDown:;Down=NO KEY
+;LD A,0Fh
+JP DebounceCheck
+KeyRight:;Right=NO KEY
+;LD A,0Fh
+JP DebounceCheck
+KeyLeft:;Left=NO KEY
+;LD A,0Fh
+JP DebounceCheck
+KeyUp:;Up=NO KEY
+;LD A,0Fh
+JP DebounceCheck
+
+KeySettings:;Settings=TAB
+LD A,09h
+JP DebounceCheck
+KeyLogo:;Logo=CAPS LOCK
+LD A,0Fh;Shift In Code
+JP DebounceCheck
+KeyBackspace:;Logo=CAPS LOCK
+LD A,08h
+JP DebounceCheck
+KeyEnter:;Logo=CAPS LOCK
+LD A,0Dh;Carriage Return
+JP DebounceCheck
+KeyMainMenu:;Main Menu=CTRL
+LD A,11h;Device Control 1
+JP DebounceCheck
+KeySpace:
+LD A,20h
+JP DebounceCheck
+
+;Numeros
+Key1:
+LD A,31h
+JP DebounceCheck
+Key2:
+LD A,32h
+JP DebounceCheck
+Key3:
+LD A,33h
+JP DebounceCheck
+Key4:
+LD A,34h
+JP DebounceCheck
+Key5:
+LD A,35h
+JP DebounceCheck
+Key6:
+LD A,36h
+JP DebounceCheck
+Key7:
+LD A,37h
+JP DebounceCheck
+Key8:
+LD A,38h
+JP DebounceCheck
+Key9:
+LD A,39h
+JP DebounceCheck
+Key0:
+LD A,30h
+JP DebounceCheck
+
+;Letras
+Keya:
+LD A,61h
+JP DebounceCheck
+Keyb:
+LD A,62h
+JP DebounceCheck
+Keyc:
+LD A,63h
+JP DebounceCheck
+Keyd:
+LD A,64h
+JP DebounceCheck
+Keye:
+LD A,65h
+JP DebounceCheck
+Keyf:
+LD A,66h
+JP DebounceCheck
+Keyg:
+LD A,67h
+JP DebounceCheck
+Keyh:
+LD A,68h
+JP DebounceCheck
+Keyi:
+LD A,69h
+JP DebounceCheck
+Keyj:
+LD A,6Ah
+JP DebounceCheck
+Keyk:
+LD A,6Bh
+JP DebounceCheck
+Keyl:
+LD A,6Ch
+JP DebounceCheck
+Keym:
+LD A,6Dh
+JP DebounceCheck
+Keyn:
+LD A,6Eh
+JP DebounceCheck
+Keyo:
+LD A,6Fh
+JP DebounceCheck
+Keyp:
+LD A,70h
+JP DebounceCheck
+Keyq:
+LD A,71h
+JP DebounceCheck
+Keyr:
+LD A,72h
+JP DebounceCheck
+Keys:
+LD A,73h
+JP DebounceCheck
+Keyt:
+LD A,74h
+JP DebounceCheck
+Keyu:
+LD A,75h
+JP DebounceCheck
+Keyv:
+LD A,76h
+JP DebounceCheck
+Keyw:
+LD A,77h
+JP DebounceCheck
+Keyx:
+LD A,78h
+JP DebounceCheck
+Keyy:
+LD A,79h
+JP DebounceCheck
+Keyz:
+LD A,7Ah
+JP DebounceCheck
+
+;Outros
+KeyExcl:;!
+LD A,21h
+JP DebounceCheck
+KeyAtSign:;@
+LD A,40h
+JP DebounceCheck
+KeyNumbSign:;#
+LD A,23h
+JP DebounceCheck
+KeyDollar:;$
+LD A,24h
+JP DebounceCheck
+KeyPercent:;%
+LD A,25h
+JP DebounceCheck
+KeyQuot:;"
+LD A,22h
+JP DebounceCheck
+KeyAmp:;&
+LD A,26h
+JP DebounceCheck
+KeyAst:;*
+LD A,2Ah
+JP DebounceCheck
+KeyParentOp:;(
+LD A,28h
+JP DebounceCheck
+KeyParentClo:;)
+LD A,29h
+JP DebounceCheck
+KeyPBracketsOp:;<
+LD A,3Ch
+JP DebounceCheck
+KeyPBracketsClo:;>
+LD A,3Eh
+JP DebounceCheck
+KeyBracesOp:;{
+LD A,7Bh
+JP DebounceCheck
+KeyVBar:;|
+LD A,7Ch
+JP DebounceCheck
+KeyBraceClo:;}
+LD A,7Dh
+JP DebounceCheck
+
+DebounceCheck:
+LD HL,8002h
+CP (HL)
+JP z,ResetRegA
+LD (HL),A
+RET
+ResetRegA:
+LD A,00h
+RET
+
+DisplayChar:
+LD DE,(8000H)
+LD (DE),A
+INC DE
+LD (8000H),DE
+RET

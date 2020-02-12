@@ -1,0 +1,250 @@
+	LD C,$C0
+    LD SP,$8050
+    
+    LD B,'R'
+    CALL RS232OUT
+    LD B,'E'
+    CALL RS232OUT
+    LD B,'A'
+    CALL RS232OUT
+    LD B,'D'
+    CALL RS232OUT
+    LD B,'Y'
+    CALL RS232OUT    
+ResendByte:
+    CALL RS232IN
+    LD B,A
+    CALL RS232OUT
+    LD B,' '
+    CALL RS232OUT
+    JP ResendByte
+    
+RS232OUT: ;B->Output value C->I/O Address (38400Bps - 26,042uS)
+    LD A,$00 
+	OUT(C),A ;6uS
+	NOP;2uS
+	NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	LD A,B;2uS (TOTAL 26uS)
+	OUT (C),A;BIT 1 6uS
+	RRA;2uS
+	NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	OUT (C),A
+	RRA
+	NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	OUT (C),A
+	RRA
+	NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	OUT (C),A
+	RRA
+	NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	OUT (C),A
+	RRA
+	NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	OUT (C),A
+	RRA
+	NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	OUT (C),A
+	RRA
+	NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	OUT (C),A
+	RRA
+	NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+	LD A,$ff
+	OUT (C),A
+    NOP
+    NOP
+	NOP
+	NOP
+    NOP
+    NOP
+	RET
+    
+RS232IN: ;A->Return Value B->Routine Buffer C->I/O Address (38400Bps - 26,042uS)
+	LD B,$00
+    LD A,$00
+RS232INStart: ;Start Bit Loop
+    IN A,(C) ;6uS
+    CP $FD ;3,5uS
+    JP NZ,RS232INStart ;Loop end 5uS
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    
+RS232ReceiveByteStart:
+    IN A,(C) ;BIT 0 6uS
+    AND $02 ;3,5uS
+    OR B ;2uS
+    RRCA ;2uS
+    LD B,A ;2uS
+    NOP ;2 uS
+    NOP
+    NOP
+    NOP
+    NOP ;25.5uS TOTAL
+    
+    IN A,(C) ;BIT 1
+    AND $02
+    OR B
+    RRCA
+    LD B,A
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    
+    IN A,(C) ;BIT 2
+    AND $02
+    OR B
+    RRCA
+    LD B,A
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    
+    IN A,(C) ;BIT 3
+    AND $02
+    OR B
+    RRCA
+    LD B,A
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    
+    IN A,(C) ;BIT 4
+    AND $02
+    OR B
+    RRCA
+    LD B,A
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    
+    IN A,(C) ;BIT 5
+    AND $02
+    OR B
+    RRCA
+    LD B,A
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    
+    IN A,(C) ;BIT 6
+    AND $02
+    OR B
+    RRCA
+    LD B,A
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    
+    IN A,(C) ;BIT 7
+    AND $02
+    OR B
+    RRCA
+    RRCA
+    NOP
+    NOP
+    
+    RET
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    

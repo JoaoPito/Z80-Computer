@@ -1,0 +1,53 @@
+;Protocolo RS232 - 9600bps(104.1us/4Mhz)
+;Instruction Fetch -> 1us
+;OUT (c),r -> 3us
+;LD r,r' -> 1us
+;LD r,n -> 1.75us
+
+Program:
+
+JP Program
+
+SerialOut9600bps:;LSB First(RS232 Protocol)
+
+LD B,00h;1.75us
+OUT(C),B;Envia Start Bit(4us)
+;Espera 98us
+
+LD B,A
+OUT(C),B;ENVIA O 1º BIT
+;Espera 98us
+
+RRA ;COMECA A PROCESSAR O 2º BIT
+LD B,A
+OUT(C),B
+;Espera 98us
+
+RRA ;COMECA A PROCESSAR O 4º BIT
+LD B,A
+OUT(C),B
+;Espera 98us
+
+RRA ;COMECA A PROCESSAR O 5º BIT
+LD B,A
+OUT(C),B
+;Espera 98us
+
+RRA ;COMECA A PROCESSAR O 6º BIT
+LD B,A
+OUT(C),B
+;Espera 98us
+
+RRA ;COMECA A PROCESSAR O 7º BIT
+LD B,A
+OUT(C),B
+;Espera 98us
+
+RRA ;COMECA A PROCESSAR O 8º BIT
+LD B,A
+OUT(C),B
+;Espera 98us
+
+LD B,FFh;1.75us
+OUT(C),B;Envia Stop Bit(4us)
+RET

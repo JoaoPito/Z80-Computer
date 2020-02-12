@@ -1,0 +1,8 @@
+LD A,00h
+LD (2000H),A
+LD (4000h),A
+LD (6000h),A
+LD (3FFFh),A
+LD (5FFFh),A
+LD (7FFFh),A
+JP 0000h

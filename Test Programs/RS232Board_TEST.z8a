@@ -1,0 +1,8 @@
+LD A,FFh;1,75us
+LD C,C0h;1.75us
+OUT(C),A;4us
+NOP;1us
+LD A,00h;1,75us
+OUT(C),A;4us
+JP 0000h;2,5us
+;TOTAL:19,75us->4Mhz

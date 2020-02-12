@@ -1,0 +1,32 @@
+
+Memory Configuration
+
+Name             Origin             Length             Attributes
+*default*        0x0000000000000000 0xffffffffffffffff
+
+Linker script and memory map
+
+                0x0000000000100000                phys = 0x100000
+                0x0000000000001000                alig = 0x1000
+LOAD kwrap.o
+
+.text           0x0000000000100000     0x1000
+                0x0000000000100000                code = .
+ *(.text)
+ .text          0x0000000000100000       0x35 kwrap.o
+                0x0000000000100000                start
+ *(.rodata)
+                0x0000000000101000                . = ALIGN (alig)
+ *fill*         0x0000000000100035      0xfcb 00
+                0x0000000000101000                data = .
+
+.data           0x0000000000101000        0x0
+ *(.data)
+                0x0000000000101000                . = ALIGN (alig)
+                0x0000000000101000                bss = .
+
+.bss            0x0000000000101000        0x0
+ *(.bss)
+                0x0000000000101000                . = ALIGN (alig)
+                0x0000000000101000                end = .
+OUTPUT(kernel.bin binary)
